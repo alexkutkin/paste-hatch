@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Context Box — прототип</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./app.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  </head>
+  <body>
+    <div class="prototype-shell" x-data="pasteHatchPrototype">
+      <div class="app-window" x-show="windowVisible" x-cloak>
+      <header class="titlebar">
+        <div class="titlebar-brand">
+          <button class="titlebar-icon" type="button" aria-label="Меню">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <span class="app-title">Context Box</span>
+        </div>
+
+        <div class="window-controls" aria-label="Управление окном">
+          <button class="window-control pin-control" type="button" aria-label="Закрепить окно" title="Закрепить">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m16 4 4 4-3 1-3 4-1 4-2-2-6 6 5-7-2-2 4-1 4-3z" />
+            </svg>
+          </button>
+          <button class="window-control minimize-control" type="button" aria-label="Свернуть" title="Свернуть">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12" /></svg>
+          </button>
+          <button class="window-control close-control" type="button" aria-label="Свернуть в трей" title="Свернуть в трей" @click="windowVisible = false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="content-area">
+        <nav class="tabs" role="tablist" aria-label="Корзины контекста">
+          <template x-for="tab in tabs" :key="tab.id">
+            <div class="tab-shell" :class="{ 'tab-shell-active': activeTabId === tab.id }">
+              <div
+                class="tab"
+                role="tab"
+                :aria-selected="activeTabId === tab.id"
+                :tabindex="activeTabId === tab.id ? 0 : -1"
+                :title="tab.renaming ? '' : 'Дважды щёлкните, чтобы переименовать корзину'"
+                @click="selectTab(tab)"
+                @dblclick.stop="startTabRename(tab, $event)"
+                @keydown.enter.self.prevent="selectTab(tab)"
+              >
+                <template x-if="tab.renaming">
+                  <input class="tab-name-input" type="text" aria-label="Название корзины" x-model="tab.editName" @click.stop @dblclick.stop @keydown.enter.stop.prevent="saveTabRename(tab)" @keydown.escape.stop.prevent="cancelTabRename(tab)" />
+                </template>
+                <template x-if="!tab.renaming">
+                  <span class="tab-name" x-text="tab.name"></span>
+                </template>
+              </div>
+              <button class="tab-close" type="button" :aria-label="`Закрыть корзину ${tab.name}`" title="Закрыть корзину" :disabled="tabs.length <= 1" @click="closeTab(tab)">
+                <svg viewBox="0 0 16 16"><path d="m4 4 8 8m0-8-8 8" /></svg>
+              </button>
+            </div>
+          </template>
+          <button class="add-tab" type="button" aria-label="Создать корзину" :title="tabs.length >= 10 ? 'Достигнут предел в 10 корзин' : 'Создать корзину'" :disabled="tabs.length >= 10" @click="createTab()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </nav>
+
+        <section class="basket-heading" aria-live="polite">
+          <div class="basket-heading-main">
+            <h1 x-text="activeTab.name"></h1>
+            <div class="basket-details">
+              <span class="basket-uid" x-text="`ID ${activeTab.uid}`"></span>
+              <span class="basket-detail-separator" aria-hidden="true">·</span>
+              <p class="basket-path" x-text="activeTab.path"></p>
+              <button class="open-folder-button" type="button" @click="openFolder(activeTab)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="m3 11 2-3h15"/></svg>
+                <span>Открыть папку</span>
+              </button>
+            </div>
+          </div>
+          <span class="basket-count" x-text="`${tabs.length}/10 корзин`"></span>
+        </section>
+
+        <section class="dropzone" aria-label="Область вставки и перетаскивания">
+          <svg class="dropzone-icon" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M11 8H8a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-3" />
+            <path d="M12 5a2 2 0 0 1 2-2h7l5 5v8" />
+            <path d="M21 3v6h5M18 13h10m-4-4 4 4-4 4" />
+          </svg>
+          <strong>Ctrl+V или перетащи файлы</strong>
+          <span>Скриншоты · Текст · Ссылки · Файлы</span>
+        </section>
+
+        <section class="contents-section" aria-label="Содержимое корзины">
+          <div class="section-heading">
+            <div class="contents-title">
+              <h2>Содержимое</h2>
+              <button class="copy-path" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" />
+                  <path d="m3 11 2-3h15" />
+                </svg>
+                <span>Copy Path</span>
+              </button>
+            </div>
+            <span class="contents-count" x-text="fileCountLabel(activeTab.items.length)"></span>
+          </div>
+
+          <div class="file-list">
+            <template x-for="item in activeTab.items" :key="item.id">
+              <article
+                class="file-row"
+                :class="{ 'file-row-selected': selectedItemId === item.id }"
+                :aria-label="`${item.name}, ${item.type}`"
+                :title="item.editing ? '' : 'Дважды щёлкните, чтобы открыть в приложении по умолчанию'"
+                tabindex="0"
+                @click="selectItem(item)"
+                @dblclick="openAssociatedApp(item, $event)"
+                @keydown.enter.self.prevent="openAssociatedApp(item)"
+              >
+                <span class="file-icon" :class="`file-icon-${item.kind}`" aria-hidden="true">
+                  <svg x-show="item.kind === 'image'" viewBox="0 0 24 24">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                    <circle cx="9" cy="9" r="1.6" />
+                    <path d="m6 17 5-5 2.5 2.5 2-2L19 16" />
+                  </svg>
+                  <svg x-show="item.kind === 'link'" viewBox="0 0 24 24">
+                    <path d="m10 13.5 4-4" />
+                    <path d="M8.5 15.5 7 17a4 4 0 0 1-5.5-5.8l4-4a4 4 0 0 1 5.7 0" />
+                    <path d="M15.5 8.5 17 7a4 4 0 0 1 5.5 5.8l-4 4a4 4 0 0 1-5.7 0" />
+                  </svg>
+                  <svg x-show="item.kind === 'text' || item.kind === 'file'" viewBox="0 0 24 24">
+                    <path d="M6 4h9l4 4v12H6z" />
+                    <path d="M14 4v5h5M9 13h7M9 16h7" />
+                  </svg>
+                </span>
+                <span
+                  class="file-description"
+                >
+                  <template x-if="item.editing">
+                    <span class="rename-control" @click.stop>
+                      <input class="rename-input" type="text" aria-label="Новое имя файла без расширения" x-model="item.editBase" @keydown.enter.stop.prevent="saveRename(item)" @keydown.escape.stop.prevent="cancelRename(item)" />
+                      <span class="rename-extension" x-text="item.editExtension"></span>
+                      <button class="rename-action rename-save" type="button" aria-label="Сохранить имя" @click="saveRename(item)">✓</button>
+                      <button class="rename-action" type="button" aria-label="Отменить переименование" @click="cancelRename(item)">×</button>
+                    </span>
+                  </template>
+                  <template x-if="!item.editing">
+                    <>
+                      <strong class="file-name" x-text="item.name"></strong>
+                      <span x-text="item.type"></span>
+                    </>
+                  </template>
+                </span>
+                <span class="row-actions" @dblclick.stop>
+                  <button class="rename-button" type="button" aria-label="Переименовать файл" title="Переименовать" @click.stop="startRename(item)">✎</button>
+                  <span class="remove-mark" aria-hidden="true">×</span>
+                </span>
+              </article>
+            </template>
+          </div>
+        </section>
+
+        <section class="quick-note" aria-label="Быстрая заметка">
+          <div class="note-heading">
+            <svg class="note-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 5.5A2.5 2.5 0 0 1 7.5 3h9A2.5 2.5 0 0 1 19 5.5v9L14 19H7.5A2.5 2.5 0 0 1 5 16.5z" />
+              <path d="M14 19v-4h5" />
+            </svg>
+            <h2>Быстрая заметка</h2>
+            <span class="note-close" aria-hidden="true">×</span>
+          </div>
+          <div class="note-entry">
+            <input class="note-input" type="text" aria-label="Поле быстрой заметки" placeholder="Напиши что-нибудь..." x-model="noteDraft" @keydown.enter.prevent="saveQuickNote()" />
+            <button class="enter-button" type="button" aria-label="Сохранить заметку" @click="saveQuickNote()">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8v5a2 2 0 0 1-2 2H5m4-4-4 4 4 4" /></svg>
+            </button>
+          </div>
+          <div class="note-help">
+            <span><strong>Enter</strong> — сохранить как .txt</span>
+            <span>Без диалога сохранения</span>
+          </div>
+        </section>
+
+      </main>
+      </div>
+
+      <div class="tray-simulator" @click.outside="trayMenuOpen = false">
+        <button class="tray-trigger" type="button" aria-label="Открыть меню системного трея" title="Правый щелчок открывает меню трея" @click="trayMenuOpen = !trayMenuOpen" @contextmenu.prevent="trayMenuOpen = !trayMenuOpen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4zM8 7V4h8v3M8 12h.01M12 12h.01M16 12h.01" /></svg>
+          <span>Трей · ПКМ</span>
+        </button>
+        <div class="tray-menu" x-show="trayMenuOpen" x-transition.origin.bottom.right x-cloak>
+          <div class="tray-menu-title">Context Box</div>
+          <button type="button" @click="windowVisible = true; trayMenuOpen = false">Показать окно</button>
+        </div>
+      </div>
+
+      <div class="open-toast" x-show="openToast" x-transition.opacity x-cloak role="status" aria-live="polite" x-text="openToast"></div>
+    </div>
+  </body>
+</html>
