@@ -58,7 +58,7 @@
                   <span class="tab-name" x-text="tab.name"></span>
                 </template>
               </div>
-              <button class="tab-close" type="button" :aria-label="`Закрыть корзину ${tab.name}`" title="Закрыть корзину" :disabled="tabs.length <= 1" @click="closeTab(tab)">
+              <button class="tab-close" type="button" :aria-label="`Закрыть корзину ${tab.name}`" title="Закрыть и удалить корзину" :disabled="tabs.length <= 1" @click="requestCloseTab(tab)">
                 <svg viewBox="0 0 16 16"><path d="m4 4 8 8m0-8-8 8" /></svg>
               </button>
             </div>
@@ -115,11 +115,16 @@
                 class="file-row"
                 :class="{ 'file-row-selected': selectedItemId === item.id }"
                 :aria-label="`${item.name}, ${item.type}`"
-                :title="item.editing ? '' : 'Дважды щёлкните, чтобы открыть в приложении по умолчанию'"
+                :title="item.editing ? '' : 'Двойной щелчок — открыть; правый щелчок или Shift+F10 — действия с файлом; F2 — переименовать'"
+                :data-item-id="item.id"
                 tabindex="0"
                 @click="selectItem(item)"
                 @dblclick="openAssociatedApp(item, $event)"
                 @keydown.enter.self.prevent="openAssociatedApp(item)"
+                @keydown.f2.self.prevent="startRename(item)"
+                @keydown.delete.self.prevent="requestDeleteItem(activeTab, item)"
+                @keydown.shift.f10.self.prevent="openItemContextMenu(item, $event)"
+                @contextmenu.prevent="openItemContextMenu(item, $event)"
               >
                 <span class="file-icon" :class="`file-icon-${item.kind}`" aria-hidden="true">
                   <svg x-show="item.kind === 'image'" viewBox="0 0 24 24">
@@ -156,13 +161,30 @@
                   </template>
                 </span>
                 <span class="row-actions" @dblclick.stop>
-                  <button class="rename-button" type="button" aria-label="Переименовать файл" title="Переименовать" @click.stop="startRename(item)">✎</button>
-                  <span class="remove-mark" aria-hidden="true">×</span>
+                  <button class="remove-button" type="button" :aria-label="`Удалить ${item.name}`" title="Удалить файл" @click.stop="requestDeleteItem(activeTab, item)">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8" /></svg>
+                  </button>
                 </span>
               </article>
             </template>
           </div>
         </section>
+
+        <div
+          class="item-context-menu"
+          x-show="itemContextMenu"
+          x-cloak
+          :style="`left: ${itemContextMenu?.x ?? 0}px; top: ${itemContextMenu?.y ?? 0}px`"
+          @click.outside="closeItemContextMenu()"
+          @keydown.escape.window="closeItemContextMenu()"
+          role="menu"
+          aria-label="Действия с файлом"
+        >
+          <button type="button" role="menuitem" @click="openAssociatedApp(itemContextMenu.item); closeItemContextMenu()">Открыть</button>
+          <button type="button" role="menuitem" @click="startRename(itemContextMenu.item); closeItemContextMenu()">Переименовать <span>F2</span></button>
+          <div class="context-menu-separator" aria-hidden="true"></div>
+          <button class="context-menu-danger" type="button" role="menuitem" @click="requestDeleteItem(activeTab, itemContextMenu.item); closeItemContextMenu()">Удалить</button>
+        </div>
 
         <section class="quick-note" aria-label="Быстрая заметка">
           <div class="note-heading">
@@ -200,6 +222,21 @@
       </div>
 
       <div class="open-toast" x-show="openToast" x-transition.opacity x-cloak role="status" aria-live="polite" x-text="openToast"></div>
+
+      <div class="delete-modal-backdrop" x-show="deleteCandidate" x-transition.opacity x-cloak @click.self="cancelDeleteCandidate()" @keydown.escape.window="cancelDeleteCandidate()">
+        <section class="delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-dialog-title" :aria-describedby="deleteCandidate?.kind === 'basket' ? 'delete-dialog-description' : 'item-delete-dialog-description'">
+          <div class="delete-dialog-icon" aria-hidden="true">!</div>
+          <div class="delete-dialog-copy">
+            <h2 id="delete-dialog-title" x-text="deleteCandidate?.kind === 'basket' ? 'Удалить корзину?' : 'Удалить файл?' "></h2>
+            <p id="delete-dialog-description" x-show="deleteCandidate?.kind === 'basket'">Корзина «<strong x-text="deleteCandidate?.name"></strong>» и все её файлы будут отправлены в Корзину Windows, откуда их можно восстановить.</p>
+            <p id="item-delete-dialog-description" x-show="deleteCandidate?.kind === 'item'">Файл «<strong x-text="deleteCandidate?.name"></strong>» будет отправлен в Корзину Windows.</p>
+          </div>
+          <div class="delete-dialog-actions">
+            <button class="dialog-button" type="button" x-ref="cancelDeleteButton" @click="cancelDeleteCandidate()">Отмена</button>
+            <button class="dialog-button dialog-button-danger" type="button" @click="confirmDeleteCandidate()">В Корзину Windows</button>
+          </div>
+        </section>
+      </div>
     </div>
   </body>
 </html>
