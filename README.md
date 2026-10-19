@@ -59,6 +59,20 @@ powershell -ExecutionPolicy Bypass -File scripts\run.ps1     # сборка пр
 Аргумент `--show` открывает окно сразу, не дожидаясь щелчка по значку в трее.
 Архитектура — x64 (при необходимости можно собрать `-p:Platform=ARM64`).
 
+### Ярлык на рабочем столе
+
+Сборка по умолчанию — framework-dependent: приложение занимает папку `bin\Release`, но требует
+установленного **.NET 9 Desktop Runtime** (входит в SDK). Ярлык на рабочем столе создаётся так:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1                 # если ещё не собрано
+powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1      # ярлык PasteHatch на рабочем столе
+powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1 -Uninstall   # убрать ярлык
+```
+
+Ярлык указывает на `src\PasteHatch.App\bin\x64\Release\...\PasteHatch.exe`; после пересборки
+цель не меняется.
+
 ## Где хранятся данные
 
 | Что | Где |
