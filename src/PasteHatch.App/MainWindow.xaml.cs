@@ -42,6 +42,8 @@ public sealed partial class MainWindow : Window
     private TrayIcon? _tray;
     private SettingsWindow? _settingsWindow;
     private MaterialRow? _selectedRow;
+    private readonly System.Collections.ObjectModel.ObservableCollection<MaterialRow> _materialRows = new();
+    private string? _tabsSignature;
     private string? _editingTabUid;
     private string? _editingTabOriginalName;
     private string? _hiddenStatus;
@@ -57,6 +59,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        MaterialsList.ItemsSource = _materialRows;
 
         // UI smoke-test isolation: run the window off-screen, without activation and optionally
         // without a tray icon, so automated checks never flash windows or steal focus.
@@ -443,6 +446,19 @@ public sealed partial class MainWindow : Window
 
     private void RefreshTabs()
     {
+        // Rebuilding TabViewItems re-creates their XAML containers, so it only happens when the
+        // tab strip really changed; material updates just re-sync the active selection.
+        var signature = string.Join(
+            '\u001f',
+            _workspace.Tabs.Select(tab => tab.Uid + '\u001e' + tab.DisplayName)) + '\u001f' + _workspace.CanCloseTab;
+
+        if (string.Equals(signature, _tabsSignature, StringComparison.Ordinal))
+        {
+            SelectActiveTabItem();
+            return;
+        }
+
+        _tabsSignature = signature;
         var activeUid = _workspace.ActiveTab?.Uid;
         BasketsTabView.TabItems.Clear();
 
@@ -470,6 +486,19 @@ public sealed partial class MainWindow : Window
         }
 
         DispatcherQueue.TryEnqueue(UpdateAddButtonState);
+    }
+
+    private void SelectActiveTabItem()
+    {
+        var activeUid = _workspace.ActiveTab?.Uid;
+        var activeItem = BasketsTabView.TabItems
+            .OfType<TabViewItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string, activeUid, StringComparison.Ordinal));
+
+        if (activeItem is not null && !ReferenceEquals(BasketsTabView.SelectedItem, activeItem))
+        {
+            BasketsTabView.SelectedItem = activeItem;
+        }
     }
 
     private void UpdateAddButtonState()
@@ -503,14 +532,12 @@ public sealed partial class MainWindow : Window
     private void RefreshMaterials()
     {
         var selectedFileName = _selectedRow?.FileName;
+        SyncMaterialRows(_workspace.Materials);
 
-        var rows = _workspace.Materials.Select(material => new MaterialRow(material)).ToList();
         _selectedRow = null;
-        MaterialsList.ItemsSource = rows;
-
         if (selectedFileName is not null)
         {
-            var match = rows.FirstOrDefault(row =>
+            var match = _materialRows.FirstOrDefault(row =>
                 string.Equals(row.FileName, selectedFileName, StringComparison.OrdinalIgnoreCase));
             if (match is not null)
             {
@@ -519,8 +546,50 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        EmptyStatePanel.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        FileCountText.Text = RussianPlural.Files(rows.Count);
+        EmptyStatePanel.Visibility = _materialRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        FileCountText.Text = RussianPlural.Files(_materialRows.Count);
+    }
+
+    /// <summary>
+    /// Brings the bound rows in line with the workspace one item at a time instead of replacing
+    /// the whole ItemsSource on every paste; this keeps ListView containers stable and avoids
+    /// allocation churn when materials are added frequently.
+    /// </summary>
+    private void SyncMaterialRows(System.Collections.Generic.IReadOnlyList<Material> materials)
+    {
+        for (var index = 0; index < materials.Count; index++)
+        {
+            var material = materials[index];
+            if (index < _materialRows.Count &&
+                string.Equals(_materialRows[index].FileName, material.FileName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var existingIndex = -1;
+            for (var search = index + 1; search < _materialRows.Count; search++)
+            {
+                if (string.Equals(_materialRows[search].FileName, material.FileName, StringComparison.Ordinal))
+                {
+                    existingIndex = search;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0)
+            {
+                _materialRows.Move(existingIndex, index);
+            }
+            else
+            {
+                _materialRows.Insert(index, new MaterialRow(material));
+            }
+        }
+
+        while (_materialRows.Count > materials.Count)
+        {
+            _materialRows.RemoveAt(_materialRows.Count - 1);
+        }
     }
 
     private void RefreshStatus()
