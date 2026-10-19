@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="PasteHatch.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="PasteHatch">
+
+    <!-- Standard WinUI 3 layout built from default Fluent controls only:
+         TabView (baskets) + CommandBar (commands) + ListView (materials) +
+         TextBox/Button (quick note) + InfoBar (status) + status bar (path/count).
+         The app follows the system light/dark theme. -->
+    <Grid
+        x:Name="RootGrid"
+        AllowDrop="True"
+        Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+        DragEnter="OnRootDragEnter"
+        DragLeave="OnRootDragLeave"
+        DragOver="OnRootDragOver"
+        Drop="OnRootDrop">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="V" Modifiers="Control" Invoked="OnPasteAcceleratorInvoked" />
+        </Grid.KeyboardAccelerators>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TabView
+            x:Name="BasketsTabView"
+            Grid.Row="0"
+            Margin="16,8,16,0"
+            AddTabButtonClick="OnAddTabButtonClick"
+            AutomationProperties.Name="Корзины контекста"
+            CanDragTabs="False"
+            CanReorderTabs="False"
+            SelectionChanged="OnTabSelectionChanged"
+            TabCloseRequested="OnTabCloseRequested"
+            TabWidthMode="SizeToContent" />
+
+        <CommandBar
+            x:Name="BasketCommandBar"
+            Grid.Row="1"
+            Margin="8,0,8,0"
+            DefaultLabelPosition="Right"
+            IsOpen="False">
+            <AppBarButton
+                x:Name="PasteButton"
+                Click="OnPasteClick"
+                Icon="Paste"
+                Label="Вставить"
+                ToolTipService.ToolTip="Вставить из буфера обмена (Ctrl+V)" />
+            <AppBarButton
+                x:Name="NewBasketButton"
+                Click="OnNewBasketClick"
+                Icon="Add"
+                Label="Новая корзина" />
+            <AppBarSeparator />
+            <AppBarButton
+                x:Name="OpenFolderButton"
+                Click="OnOpenFolderClick"
+                Icon="Folder"
+                Label="Открыть папку" />
+            <AppBarButton
+                x:Name="CopyPathButton"
+                Click="OnCopyPathClick"
+                Icon="Copy"
+                Label="Скопировать путь" />
+            <AppBarButton
+                x:Name="SettingsButton"
+                Click="OnSettingsClick"
+                Icon="Setting"
+                Label="Настройки" />
+        </CommandBar>
+
+        <Grid Grid.Row="2" Margin="16,4,16,0">
+            <ListView
+                x:Name="MaterialsList"
+                Padding="0,4,0,8"
+                AutomationProperties.Name="Содержимое корзины"
+                IsItemClickEnabled="False"
+                KeyDown="OnMaterialsKeyDown"
+                RightTapped="OnMaterialsRightTapped"
+                SelectionChanged="OnMaterialSelectionChanged"
+                SelectionMode="Single">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid
+                            MinHeight="48"
+                            ColumnSpacing="12"
+                            DoubleTapped="OnMaterialDoubleTapped">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <FontIcon
+                                Grid.Column="0"
+                                FontSize="20"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="{Binding Glyph}"
+                                VerticalAlignment="Center" />
+
+                            <Grid Grid.Column="1" VerticalAlignment="Center">
+                                <StackPanel Spacing="1" Visibility="{Binding NameVisibility}">
+                                    <TextBlock
+                                        Text="{Binding Name}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding TypeLabel}" />
+                                </StackPanel>
+
+                                <StackPanel
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding EditVisibility}">
+                                    <TextBox
+                                        MinWidth="180"
+                                        KeyDown="OnRenameBoxKeyDown"
+                                        Text="{Binding EditText, Mode=TwoWay}"
+                                        TextChanged="OnRenameBoxTextChanged" />
+                                    <Button
+                                        AutomationProperties.Name="Сохранить имя"
+                                        Click="OnRenameSaveClick"
+                                        Content="Сохранить" />
+                                    <Button
+                                        AutomationProperties.Name="Отменить переименование"
+                                        Click="OnRenameCancelClick"
+                                        Content="Отмена" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <StackPanel
+                x:Name="EmptyStatePanel"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="8"
+                Visibility="Collapsed">
+                <FontIcon
+                    FontSize="32"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE8B9;"
+                    HorizontalAlignment="Center" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="Корзина пуста" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="Нажмите Ctrl+V или перетащите файлы в окно" />
+                <Button
+                    Margin="0,8,0,0"
+                    Click="OnPasteClick"
+                    Content="Вставить из буфера"
+                    HorizontalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <Grid
+            Grid.Row="3"
+            Margin="16,12,16,12"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox
+                x:Name="QuickNoteTextBox"
+                Grid.Column="0"
+                AutomationProperties.Name="Быстрая заметка"
+                Header="Быстрая заметка"
+                KeyDown="OnQuickNoteKeyDown"
+                PlaceholderText="Введите текст и нажмите Enter" />
+
+            <Button
+                x:Name="QuickNoteSaveButton"
+                Grid.Column="1"
+                Padding="16,6"
+                VerticalAlignment="Bottom"
+                Click="OnSaveNoteClick"
+                Content="Добавить"
+                ToolTipService.ToolTip="Сохранить заметку (Enter)" />
+        </Grid>
+
+        <InfoBar
+            x:Name="StatusInfoBar"
+            Grid.Row="4"
+            Margin="16,0,16,8"
+            IsClosable="True"
+            IsOpen="False"
+            Severity="Informational" />
+
+        <Border
+            Grid.Row="5"
+            Padding="16,6,16,8"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="BasketPathText"
+                    Grid.Column="0"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextTrimming="CharacterEllipsis"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    x:Name="FileCountText"
+                    Grid.Column="1"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    VerticalAlignment="Center"
+                    Text="0 файлов" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

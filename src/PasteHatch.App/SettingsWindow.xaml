@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="PasteHatch.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Настройки — PasteHatch">
+
+    <!-- Standard settings layout: grouped toggle switches with header + description, applied
+         immediately (no OK/Cancel), plus an About block and a reset command. -->
+    <Grid x:Name="SettingsRoot" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" Padding="24,20,24,0">
+            <StackPanel Spacing="8">
+                <TextBlock
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Общие" />
+
+                <Grid ColumnSpacing="16" Padding="0,12,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="Запускать в трее" />
+                        <TextBlock
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="При запуске окно не открывается: приложение работает в области уведомлений. Исключение — первый запуск." />
+                    </StackPanel>
+                    <ToggleSwitch
+                        x:Name="StartInTrayToggle"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Toggled="OnStartInTrayToggled" />
+                </Grid>
+
+                <Grid ColumnSpacing="16" Padding="0,12,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="Запоминать положение окна" />
+                        <TextBlock
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="При следующем запуске окно откроется там же и такого же размера." />
+                    </StackPanel>
+                    <ToggleSwitch
+                        x:Name="RememberPlacementToggle"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Toggled="OnRememberPlacementToggled" />
+                </Grid>
+
+                <Grid ColumnSpacing="16" Padding="0,12,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="Поверх других окон" />
+                        <TextBlock
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Окно остаётся на переднем плане, пока вы работаете с другими приложениями." />
+                    </StackPanel>
+                    <ToggleSwitch
+                        x:Name="AlwaysOnTopToggle"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Toggled="OnAlwaysOnTopToggled" />
+                </Grid>
+
+                <TextBlock
+                    Margin="0,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="О приложении" />
+                <StackPanel Margin="0,8,0,8" Spacing="2">
+                    <TextBlock Text="PasteHatch" />
+                    <TextBlock
+                        x:Name="VersionText"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Корзины контекста для локальных AI-агентов. Материалы хранятся в папках корзин в %LOCALAPPDATA%\PasteHatch." />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid
+            Grid.Row="1"
+            Padding="24,8,24,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="ResetButton"
+                Grid.Column="0"
+                AutomationProperties.Name="Сбросить настройки"
+                HorizontalAlignment="Left"
+                Click="OnResetClick"
+                Content="Сбросить настройки" />
+            <Button
+                Grid.Column="1"
+                Click="OnCloseClick"
+                Content="Готово"
+                Style="{StaticResource AccentButtonStyle}" />
+        </Grid>
+    </Grid>
+</Window>
