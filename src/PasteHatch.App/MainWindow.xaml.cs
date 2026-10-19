@@ -184,6 +184,7 @@ public sealed partial class MainWindow : Window
         }
 
         Activate();
+        NativeWindow.BringToForeground(GetWindowHandle());
         _workspace.Refresh();
     }
 
@@ -201,7 +202,11 @@ public sealed partial class MainWindow : Window
 
     private void ToggleWindowVisibility()
     {
-        if (NativeWindow.IsVisible(GetWindowHandle()))
+        var handle = GetWindowHandle();
+
+        // A minimized window is still "visible" to Win32, but the user cannot see it. Treat it as
+        // hidden so a tray click restores it instead of silently hiding it behind the taskbar.
+        if (NativeWindow.IsVisible(handle) && !NativeWindow.IsMinimized(handle))
         {
             HideToTray();
         }
@@ -526,7 +531,6 @@ public sealed partial class MainWindow : Window
         PasteButton.IsEnabled = hasTab;
         OpenFolderButton.IsEnabled = hasTab;
         CopyPathButton.IsEnabled = hasTab;
-        NewBasketButton.IsEnabled = _workspace.CanCreateTab;
     }
 
     private void RefreshMaterials()
@@ -636,8 +640,6 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnAddTabButtonClick(TabView sender, object args) => _workspace.CreateTab();
-
-    private void OnNewBasketClick(object sender, RoutedEventArgs e) => _workspace.CreateTab();
 
     private void OnTabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
     {

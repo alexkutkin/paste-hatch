@@ -19,6 +19,7 @@ public sealed class MaterialRow : INotifyPropertyChanged
     {
         Material = material;
         _editText = Path.GetFileNameWithoutExtension(material.FileName);
+        Preview = MaterialPreview.Read(material.FullPath, material.FileName);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -30,6 +31,16 @@ public sealed class MaterialRow : INotifyPropertyChanged
     public string Name => Material.FileName;
 
     public string TypeLabel => Material.TypeLabel;
+
+    /// <summary>
+    /// First lines of a text or Markdown material, shown instead of the generic type label so a
+    /// file with a time-based name still says what it contains. <c>null</c> for other materials.
+    /// </summary>
+    public string? Preview { get; }
+
+    public Visibility PreviewVisibility => Preview is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility TypeLabelVisibility => Preview is null ? Visibility.Visible : Visibility.Collapsed;
 
     public string Extension => Path.GetExtension(Material.FileName);
 

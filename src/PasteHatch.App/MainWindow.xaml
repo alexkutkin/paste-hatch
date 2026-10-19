@@ -54,11 +54,6 @@
                 Icon="Paste"
                 Label="Вставить"
                 ToolTipService.ToolTip="Вставить из буфера обмена (Ctrl+V)" />
-            <AppBarButton
-                x:Name="NewBasketButton"
-                Click="OnNewBasketClick"
-                Icon="Add"
-                Label="Новая корзина" />
             <AppBarSeparator />
             <AppBarButton
                 x:Name="OpenFolderButton"
@@ -87,6 +82,14 @@
                 RightTapped="OnMaterialsRightTapped"
                 SelectionChanged="OnMaterialSelectionChanged"
                 SelectionMode="Single">
+                <!-- Material rows are concrete data, not decoration: the default item
+                     transitions (AddDeleteThemeTransition) fade the old tab's rows out and the
+                     new tab's rows in roughly a second later, so a tab switch looks like a slow,
+                     empty list. Clearing the collection shows the current basket immediately. -->
+                <ListView.ItemContainerTransitions>
+                    <TransitionCollection />
+                </ListView.ItemContainerTransitions>
+
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Grid
@@ -111,9 +114,18 @@
                                         Text="{Binding Name}"
                                         TextTrimming="CharacterEllipsis" />
                                     <TextBlock
+                                        MaxLines="2"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="{Binding TypeLabel}" />
+                                        Text="{Binding Preview}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap"
+                                        Visibility="{Binding PreviewVisibility}" />
+                                    <TextBlock
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding TypeLabel}"
+                                        Visibility="{Binding TypeLabelVisibility}" />
                                 </StackPanel>
 
                                 <StackPanel

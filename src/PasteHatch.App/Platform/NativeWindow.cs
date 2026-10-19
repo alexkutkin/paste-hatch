@@ -53,6 +53,12 @@ public static class NativeWindow
     public static bool IsVisible(IntPtr hwnd) => hwnd != IntPtr.Zero && IsWindowVisible(hwnd);
 
     /// <summary>
+    /// True when the window exists but is minimized. A minimized window is still "visible" in
+    /// Win32 terms, so callers must check this before treating it as a window the user can see.
+    /// </summary>
+    public static bool IsMinimized(IntPtr hwnd) => hwnd != IntPtr.Zero && IsIconic(hwnd);
+
+    /// <summary>
     /// Shows a window without activating it. Used by the UI smoke tests together with an
     /// off-screen position so automated checks never steal focus or flash a window.
     /// </summary>
@@ -94,6 +100,40 @@ public static class NativeWindow
         catch (Exception)
         {
             // Isolation is best-effort; an unhidden taskbar button only affects test runs.
+        }
+    }
+
+    /// <summary>
+    /// Brings an already visible window to the foreground. <c>Window.Activate()</c> alone does
+    /// not reliably raise a WinUI 3 window that is behind other windows
+    /// (microsoft/microsoft-ui-xaml#7595), so the native call is made explicitly as well.
+    /// The window's shown/maximized state is left to <c>AppWindow.Show()</c> and the presenter;
+    /// restoring here would un-maximize a maximized window.
+    /// </summary>
+    /// <returns><c>true</c> when the window became the foreground window.</returns>
+    public static bool BringToForeground(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (SetForegroundWindow(hwnd))
+            {
+                return true;
+            }
+
+            // Windows can refuse the foreground change when the click was handled by the shell.
+            // Raise the window above its neighbours anyway so the user can see it; activating it
+            // is then one click away instead of the window staying hidden behind another app.
+            SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+            return false;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
@@ -186,6 +226,14 @@ public static class NativeWindow
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShowWindow(IntPtr hwnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr hwnd);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
     private static extern IntPtr GetWindowLongPtr64(IntPtr hwnd, int index);
