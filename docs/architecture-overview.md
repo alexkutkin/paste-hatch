@@ -1,6 +1,13 @@
 # PasteHatch — краткая архитектура
 
-Схемы выводятся из [брифа](discovery/brief.txt) и прототипа. В репозитории пока нет реализации приложения, поэтому они показывают предлагаемые границы ответственности; UI-фреймворк для .NET и место с форматом хранения состояния вкладок остаются открытыми решениями.
+Схемы выведены из [брифа](discovery/brief.txt) и прототипа и соответствуют реализованному
+приложению. Стек и обоснование решений — в [decisions.md](decisions.md).
+
+- **Платформа:** C#/.NET 9, WinUI 3 + Windows App SDK 2.5.1 (self-contained, без установки
+  рантайма Windows App SDK), Windows 10 1809+ / Windows 11.
+- **Хранилище:** папки корзин и JSON-файл состояния в `%LOCALAPPDATA%\PasteHatch`; файловая
+  система — источник истины, `state.json` хранит порядок вкладок, их названия, активную вкладку и
+  геометрию окна.
 
 ## Контекст системы
 
@@ -10,14 +17,16 @@ PasteHatch — Windows-приложение, которое собирает ф�
 flowchart LR
     user((Пользователь))
     app[PasteHatch<br/>Windows · C#/.NET]
-    windows[Windows<br/>буфер · трей · Проводник · Корзина]
+    windows[Windows<br/>буфер · трей · Проводник · Корзина · TaskDialog]
     baskets[(Файлы корзин<br/>%LOCALAPPDATA%\PasteHatch\Baskets)]
+    state[(Состояние вкладок<br/>%LOCALAPPDATA%\PasteHatch\state.json)]
     agent[Локальный AI-агент]
 
     user -->|создаёт корзины и добавляет материалы| app
     app -->|показывает содержимое и путь| user
-    app <-->|clipboard · shell · tray · recycle bin| windows
+    app <-->|clipboard · shell · tray · recycle bin · dialogs| windows
     app <-->|читает и сохраняет файлы| baskets
+    app <-->|восстанавливает вкладки и окно| state
     agent -->|читает переданную пользователем папку| baskets
 ```
 
@@ -30,21 +39,35 @@ flowchart LR
     agent[Локальный AI-агент]
 
     subgraph pastehatch[PasteHatch · C#/.NET]
-        ui[Нативное окно<br/>вкладки · содержимое · заметка]
-        core[Логика материалов и корзин<br/>определение типа · сохранение · вкладки]
-        platform[Интеграция Windows<br/>буфер · перетаскивание · запуск файлов · трей · Корзина]
+        ui[PasteHatch.App<br/>WinUI 3 · окно · вкладки · список · заметка]
+        core[PasteHatch.Core<br/>корзины · материалы · именование · state.json<br/>восстановление · классификация]
+        platform[PasteHatch.App/Platform<br/>буфер · трей · Корзина Windows · TaskDialog<br/>single instance · Win32-хелперы]
     end
 
     baskets[(Файлы корзин<br/>%LOCALAPPDATA%\PasteHatch\Baskets)]
-    session[(Состояние вкладок<br/>место и формат TBD)]
+    state[(Состояние вкладок<br/>%LOCALAPPDATA%\PasteHatch\state.json)]
 
     user -->|действия| ui
-    ui -->|команды| core
+    ui -->|команды и подписка на изменения| core
     core <-->|чтение и запись файлов| baskets
-    core <-->|восстановление вкладок| session
-    core <-->|системные операции| platform
+    core <-->|восстановление вкладок| state
+    core -->|системные операции через интерфейсы| platform
     platform <-->|Windows API| os
     agent -->|читает папку, переданную пользователем| baskets
 ```
+
+Границы ответственности:
+
+- **PasteHatch.Core** не знает про WinUI: доменные правила (лимит 10 корзин, «последняя вкладка не
+  закрывается», коллизии имён, классификация типов, UID, восстановление) и контракты
+  `IClipboardReader` / `IShellService` / `IConfirmationService` / `ITabStateStore`. Покрыт
+  xUnit-тестами.
+- **PasteHatch.App/Platform** реализует эти контракты нативными средствами Windows (WinForms
+  `TaskDialog`/`NotifyIcon`/`Clipboard`, `Microsoft.VisualBasic.FileIO` для Корзины, Win32
+  `SetWindowPos`/монитор/pin, `Mutex`+событие для единственного экземпляра).
+- **PasteHatch.App** — представление: стандартные контролы WinUI 3 (`TabView`, `CommandBar`,
+  `ListView`, `TextBox`, `InfoBar`, `MenuFlyout`) и стандартный заголовок окна; системная
+  светлая/тёмная тема; отдельное окно настроек на `ToggleSwitch`; приложение стартует в трее и
+  подписывается на `BasketWorkspace.Changed`, чтобы перерисовывать состояние.
 
 Схемы разделяют внешний контекст и внутренние обязанности приложения, как рекомендует C4 для обзорного уровня; дополнительные уровни добавляются, когда они помогают ответить на конкретный вопрос об архитектуре. См. [C4: виды диаграмм](https://c4model.com/diagrams).
