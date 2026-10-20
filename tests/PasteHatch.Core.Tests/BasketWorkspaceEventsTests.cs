@@ -112,6 +112,21 @@ public sealed class BasketWorkspaceEventsTests : IDisposable
     }
 
     [Fact]
+    public void CopyMaterialPath_RaisesChangedOnce()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        _harness.Clipboard.Payload = PastePayload.FromText("текст");
+        Assert.Equal(1, workspace.AddFromClipboard());
+        var material = workspace.RequireSingleMaterial();
+        var changedCount = 0;
+        workspace.Changed += (_, _) => changedCount++;
+
+        workspace.CopyMaterialPath(material);
+
+        Assert.Equal(1, changedCount);
+    }
+
+    [Fact]
     public void CloseTab_WhenConfirmed_RaisesChangedOnce()
     {
         var workspace = _harness.CreateInitializedWorkspace();

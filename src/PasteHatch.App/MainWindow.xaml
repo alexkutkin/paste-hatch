@@ -90,6 +90,15 @@
                     <TransitionCollection />
                 </ListView.ItemContainerTransitions>
 
+                <!-- Stretch the row content so the per-row copy button can sit at the right edge
+                     of the item instead of right after the text (ListViewItem aligns content left
+                     by default; Microsoft documents this setter for full-width row content). -->
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Grid
@@ -99,6 +108,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
                             <FontIcon
@@ -148,6 +158,17 @@
                                         Content="Отмена" />
                                 </StackPanel>
                             </Grid>
+
+                            <!-- Per-row copy action, right-aligned inside the list item (see Buttons
+                                 guidance: a button inside a container UI is right-aligned). -->
+                            <AppBarButton
+                                Grid.Column="2"
+                                AutomationProperties.Name="Скопировать путь к файлу"
+                                Click="OnCopyMaterialPathClick"
+                                Icon="Copy"
+                                LabelPosition="Collapsed"
+                                ToolTipService.ToolTip="Скопировать путь к файлу"
+                                VerticalAlignment="Center" />
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>

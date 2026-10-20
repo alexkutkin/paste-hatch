@@ -423,6 +423,24 @@ public sealed class BasketWorkspace
         }
     }
 
+    /// <summary>
+    /// Copies the full path of one material so the user can hand a concrete file to a local agent.
+    /// The path is copied as plain text, without quotes, exactly like the basket path.
+    /// </summary>
+    public void CopyMaterialPath(Material material)
+    {
+        try
+        {
+            _shell.CopyText(material.FullPath);
+            SetStatus("Путь к файлу скопирован в буфер обмена.");
+            RaiseChanged();
+        }
+        catch (Exception ex)
+        {
+            ReportError($"Не удалось скопировать путь: {ex.Message}");
+        }
+    }
+
     /// <summary>Re-reads the active basket folder, e.g. after an external agent changed it.</summary>
     public void Refresh()
     {

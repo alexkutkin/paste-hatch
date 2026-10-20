@@ -233,7 +233,7 @@ reflect the change» ([Guidelines for app settings](https://learn.microsoft.com/
 
 ## 12. Тестирование: юнит-тесты ядра + базовый smoke
 
-- **Домен покрыт юнит-тестами** (`tests/PasteHatch.Core.Tests`, xUnit, 261 тест): именование,
+- **Домен покрыт юнит-тестами** (`tests/PasteHatch.Core.Tests`, xUnit, 265 тестов): именование,
   классификация, состояние, восстановление, коллизии, подтверждения, лимит вкладок, ADS-регрессия,
   превью первых строк.
   Это дешёвые и стабильные проверки, которые стоит держать зелёными.
@@ -281,3 +281,42 @@ UTF-8 с определением BOM, `FileShare.ReadWrite | FileShare.Delete`,
 **Визуально** подпись превью заменяет общую подпись «Текст» только у текстовых/Markdown файлов;
 изображения, ссылки и прочие материалы продолжают показывать тип. `MaterialRow` читает превью при
 создании строки — перерисовка списка и его модель данных не меняются.
+
+## 15. Копирование пути конкретного файла
+
+**Требование заказчика.** В списке материалов нужна такая же кнопка копирования пути, как у
+папки корзины, но для отдельного файла: путь к конкретному материалу передаётся агенту.
+
+**Решения и почему.**
+
+- **Кнопка в строке, справа.** [Buttons](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/buttons):
+  «If your button appears within a container UI (for example, within a toast notification, a
+  flyout, or a list view item), you should right-align the button within the container.» Чтобы
+  кнопка действительно встала у правого края, строка растянута на всю ширину:
+  `HorizontalContentAlignment="Stretch"` в `ItemContainerStyle` — приём, показанный в
+  [Item containers and templates](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/item-containers-templates).
+  Без этого `ListViewItem` выравнивает содержимое влево, и кнопка оказалась бы сразу после текста.
+- **Кнопка видна всегда.** В [Contextual commanding](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/collection-commanding)
+  кнопки у элемента списка — это mouse/pen accelerator, и их можно показывать только при
+  наведении. Здесь выбран постоянный показ: копирование пути — основной сценарий продукта, а
+  постоянная кнопка доступна мышью, тачем и клавиатурой без дополнительных жестов.
+- **Команда есть и в контекстном меню.** Там же: «you should make all commands for an item
+  available in the item's context menu» и «At a minimum, use a context menu to provide access to
+  all commands». Пункт «Скопировать путь» добавлен между «Переименовать» и «Удалить…», поэтому
+  клавиатура и тач получают команду через контекстное меню.
+- **Иконка без подписи, но с именем.** [Accessibility overview](https://learn.microsoft.com/en-us/windows/apps/design/accessibility/accessibility-overview):
+  важнейшая информация для screen reader — accessible name. У кнопки заданы
+  `AutomationProperties.Name` и tooltip «Скопировать путь к файлу».
+- **Путь без кавычек.** Как и путь папки, строка копируется простым текстом: её получатель —
+  локальный агент, а не командная строка. Формат совпадает с существующей кнопкой
+  «Скопировать путь».
+- **Буфер — тот же сервис.** `BasketWorkspace.CopyMaterialPath` вызывает
+  `IShellService.CopyText` (повторы при занятом буфере уже реализованы в `ShellService`), ставит
+  статус «Путь к файлу скопирован в буфер обмена.» и сообщает об ошибке так же, как копирование
+  пути папки.
+
+**Проверено.** Юнит-тесты: копируется путь именно выбранного материала, ошибка буфера
+показывается пользователю, изменение приходит одним событием `Changed`. Одноразовый UIA-прогон
+(окно за экраном, без трея): кнопка находится по имени, клик кладёт в буфер полный путь файла
+(а не папки), кнопка стоит у правого края строки (зазор ≈12 DIP), кнопка копирования пути папки
+продолжает работать. Снимок окна с тремя материалами подтвердил вид строк.

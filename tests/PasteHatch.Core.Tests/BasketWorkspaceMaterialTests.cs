@@ -279,6 +279,46 @@ public sealed class BasketWorkspaceMaterialTests : IDisposable
     }
 
     [Fact]
+    public void CopyMaterialPath_CopiesTheFullPathOfThatFile()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var material = PasteText(workspace, "текст");
+
+        workspace.CopyMaterialPath(material);
+
+        Assert.Equal(new[] { material.FullPath }, _harness.Shell.CopiedTexts);
+        Assert.Equal("Путь к файлу скопирован в буфер обмена.", workspace.StatusMessage);
+    }
+
+    [Fact]
+    public void CopyMaterialPath_WithTwoMaterials_CopiesTheRequestedOne()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var first = PasteText(workspace, "первый");
+        _harness.Clipboard.Payload = PastePayload.FromText("второй");
+        Assert.Equal(1, workspace.AddFromClipboard());
+        var second = workspace.Materials.First(material => material.FullPath != first.FullPath);
+
+        workspace.CopyMaterialPath(first);
+
+        Assert.Equal(new[] { first.FullPath }, _harness.Shell.CopiedTexts);
+        Assert.NotEqual(second.FullPath, Assert.Single(_harness.Shell.CopiedTexts));
+    }
+
+    [Fact]
+    public void CopyMaterialPath_WhenShellFails_ReportsError()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var material = PasteText(workspace, "текст");
+        _harness.Shell.CopyTextFailure = new InvalidOperationException("clipboard is busy");
+
+        workspace.CopyMaterialPath(material);
+
+        Assert.Contains("Не удалось скопировать путь", Assert.Single(_harness.Confirmations.Errors));
+        Assert.Empty(_harness.Shell.CopiedTexts);
+    }
+
+    [Fact]
     public void OpenActiveBasketFolder_OpensTheActiveBasketDirectory()
     {
         var workspace = _harness.CreateInitializedWorkspace();

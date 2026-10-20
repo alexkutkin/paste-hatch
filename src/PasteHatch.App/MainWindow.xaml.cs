@@ -737,6 +737,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnCopyMaterialPathClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
+        {
+            _workspace.CopyMaterialPath(row.Material);
+        }
+    }
+
     private void OnRenameSaveClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
@@ -871,11 +879,17 @@ public sealed partial class MainWindow : Window
         var renameItem = new MenuFlyoutItem { Text = "Переименовать" };
         renameItem.Click += (_, _) => BeginRenameMaterial(row);
 
+        // The row button is the fast pointer path; the context menu is the input-agnostic one
+        // (keyboard, touch), as Microsoft's contextual commanding guidance requires.
+        var copyPathItem = new MenuFlyoutItem { Text = "Скопировать путь" };
+        copyPathItem.Click += (_, _) => _workspace.CopyMaterialPath(row.Material);
+
         var deleteItem = new MenuFlyoutItem { Text = "Удалить…" };
         deleteItem.Click += (_, _) => _workspace.DeleteMaterial(row.Material);
 
         flyout.Items.Add(openItem);
         flyout.Items.Add(renameItem);
+        flyout.Items.Add(copyPathItem);
         flyout.Items.Add(new MenuFlyoutSeparator());
         flyout.Items.Add(deleteItem);
         flyout.ShowAt(MaterialsList, new FlyoutShowOptions { Position = position });
