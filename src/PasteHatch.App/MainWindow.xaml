@@ -37,7 +37,8 @@
             AddTabButtonClick="OnAddTabButtonClick"
             AutomationProperties.Name="Корзины контекста"
             CanDragTabs="False"
-            CanReorderTabs="False"
+            CanReorderTabs="True"
+            PreviewKeyDown="OnBasketsTabViewKeyDown"
             SelectionChanged="OnTabSelectionChanged"
             TabCloseRequested="OnTabCloseRequested"
             TabWidthMode="SizeToContent" />
@@ -76,9 +77,19 @@
             <ListView
                 x:Name="MaterialsList"
                 Padding="0,4,0,8"
+                AllowDrop="True"
                 AutomationProperties.Name="Содержимое корзины"
+                CanDragItems="True"
+                CanReorderItems="True"
+                DragEnter="OnMaterialsDragEnter"
+                DragItemsCompleted="OnMaterialsDragItemsCompleted"
+                DragItemsStarting="OnMaterialsDragItemsStarting"
+                DragLeave="OnMaterialsDragLeave"
+                DragOver="OnMaterialsDragOver"
+                Drop="OnMaterialsDrop"
                 IsItemClickEnabled="False"
                 KeyDown="OnMaterialsKeyDown"
+                ReorderMode="Enabled"
                 RightTapped="OnMaterialsRightTapped"
                 SelectionChanged="OnMaterialSelectionChanged"
                 SelectionMode="Single">
@@ -121,6 +132,7 @@
                             <Grid Grid.Column="1" VerticalAlignment="Center">
                                 <StackPanel Spacing="1" Visibility="{Binding NameVisibility}">
                                     <TextBlock
+                                        DoubleTapped="OnMaterialTitleDoubleTapped"
                                         Text="{Binding Name}"
                                         TextTrimming="CharacterEllipsis" />
                                     <TextBlock
@@ -148,6 +160,13 @@
                                         KeyDown="OnRenameBoxKeyDown"
                                         Text="{Binding EditText, Mode=TwoWay}"
                                         TextChanged="OnRenameBoxTextChanged" />
+                                    <!-- The extension stays visible and is never editable. -->
+                                    <TextBlock
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding Extension}"
+                                        ToolTipService.ToolTip="Расширение не меняется"
+                                        VerticalAlignment="Center" />
                                     <Button
                                         AutomationProperties.Name="Сохранить имя"
                                         Click="OnRenameSaveClick"
@@ -159,16 +178,31 @@
                                 </StackPanel>
                             </Grid>
 
-                            <!-- Per-row copy action, right-aligned inside the list item (see Buttons
+                            <!-- Per-row actions, right-aligned inside the list item (see Buttons
                                  guidance: a button inside a container UI is right-aligned). -->
-                            <AppBarButton
+                            <StackPanel
                                 Grid.Column="2"
-                                AutomationProperties.Name="Скопировать путь к файлу"
-                                Click="OnCopyMaterialPathClick"
-                                Icon="Copy"
-                                LabelPosition="Collapsed"
-                                ToolTipService.ToolTip="Скопировать путь к файлу"
-                                VerticalAlignment="Center" />
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding ActionsVisibility}">
+                                <AppBarButton
+                                    AutomationProperties.Name="Переименовать файл"
+                                    Click="OnRenameMaterialClick"
+                                    LabelPosition="Collapsed"
+                                    ToolTipService.ToolTip="Переименовать (F2)"
+                                    VerticalAlignment="Center">
+                                    <AppBarButton.Icon>
+                                        <FontIcon Glyph="&#xE8AC;" />
+                                    </AppBarButton.Icon>
+                                </AppBarButton>
+                                <AppBarButton
+                                    AutomationProperties.Name="Скопировать путь к файлу"
+                                    Click="OnCopyMaterialPathClick"
+                                    Icon="Copy"
+                                    LabelPosition="Collapsed"
+                                    ToolTipService.ToolTip="Скопировать путь к файлу"
+                                    VerticalAlignment="Center" />
+                            </StackPanel>
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>

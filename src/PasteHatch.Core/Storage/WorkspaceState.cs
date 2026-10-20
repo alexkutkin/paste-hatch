@@ -3,7 +3,7 @@ namespace PasteHatch.Core;
 /// <summary>Content of the tab-state JSON file in <c>%LOCALAPPDATA%\PasteHatch\state.json</c>.</summary>
 public sealed class WorkspaceState
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public int Version { get; set; } = CurrentVersion;
 
@@ -22,6 +22,12 @@ public sealed class TabState
 
     /// <summary>User-visible tab name; the hyphenated UID remains the on-disk identity.</summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// User's order of material file names inside this basket. Files on disk remain the source of
+    /// truth: names that no longer exist are ignored, new files are appended after known ones.
+    /// </summary>
+    public List<string> MaterialOrder { get; set; } = [];
 }
 
 /// <summary>Last floating-window rectangle in physical pixels, restored on the next launch.</summary>

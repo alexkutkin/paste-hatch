@@ -13,6 +13,7 @@ using PasteHatch.Platform;
 using PasteHatch.Ui;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
+using Windows.Foundation.Collections;
 using Windows.Graphics;
 using Windows.Storage;
 using Windows.System;
@@ -50,8 +51,10 @@ public sealed partial class MainWindow : Window
     private string? _startupError;
     private bool _startupErrorReported;
     private bool _refreshScheduled;
+    private bool _tabOrderSyncScheduled;
     private bool _isUpdatingUi;
     private bool _isExiting;
+    private bool _internalReorderDrag;
     private readonly bool _testOffscreen;
     private readonly bool _testNoTray;
     private IntPtr _windowHandle = IntPtr.Zero;
@@ -60,6 +63,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         MaterialsList.ItemsSource = _materialRows;
+        BasketsTabView.TabItemsChanged += OnTabItemsChanged;
 
         // UI smoke-test isolation: run the window off-screen, without activation and optionally
         // without a tray icon, so automated checks never flash windows or steal focus.
@@ -649,6 +653,89 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// The built-in TabView reorder mutates <see cref="TabView.TabItems"/>. The workspace order is
+    /// synced after the current input event (Remove+Insert may arrive as two changes), and skipped
+    /// while the strip is being rebuilt from the workspace itself.
+    /// </summary>
+    private void OnTabItemsChanged(TabView sender, IVectorChangedEventArgs args)
+    {
+        if (_isUpdatingUi || _tabOrderSyncScheduled)
+        {
+            return;
+        }
+
+        _tabOrderSyncScheduled = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _tabOrderSyncScheduled = false;
+            PersistTabOrder();
+        });
+    }
+
+    private void PersistTabOrder()
+    {
+        if (_isUpdatingUi)
+        {
+            return;
+        }
+
+        var uids = BasketsTabView.TabItems
+            .OfType<TabViewItem>()
+            .Select(item => item.Tag as string)
+            .Where(uid => !string.IsNullOrEmpty(uid))
+            .Cast<string>()
+            .ToList();
+
+        // Transient states during Add/Remove are ignored: the workspace drives those itself.
+        if (uids.Count != _workspace.Tabs.Count)
+        {
+            return;
+        }
+
+        _workspace.ReorderTabs(uids);
+    }
+
+    private void OnBasketsTabViewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        // While the tab title is being edited, Ctrl+Shift+Left/Right belongs to the text box.
+        if (_editingTabUid is not null)
+        {
+            return;
+        }
+
+        var ctrlDown = InputKeyboardSource
+            .GetKeyStateForCurrentThread(VirtualKey.Control)
+            .HasFlag(CoreVirtualKeyStates.Down);
+        var shiftDown = InputKeyboardSource
+            .GetKeyStateForCurrentThread(VirtualKey.Shift)
+            .HasFlag(CoreVirtualKeyStates.Down);
+        if (!ctrlDown || !shiftDown)
+        {
+            return;
+        }
+
+        if (e.Key == VirtualKey.Left)
+        {
+            e.Handled = true;
+            MoveActiveTab(-1);
+        }
+        else if (e.Key == VirtualKey.Right)
+        {
+            e.Handled = true;
+            MoveActiveTab(1);
+        }
+    }
+
+    private void MoveActiveTab(int offset)
+    {
+        var uid = _workspace.ActiveTab?.Uid;
+        if (uid is not null)
+        {
+            _workspace.MoveTab(uid, offset);
+        }
+    }
+
     private void OnTabDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         if (sender is TabViewItem item && item.Tag is string uid)
@@ -745,6 +832,27 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnRenameMaterialClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
+        {
+            BeginRenameMaterial(row);
+        }
+    }
+
+    /// <summary>
+    /// Double-click on the title starts renaming; double-click anywhere else in the row keeps the
+    /// default command (open the material). The handled flag keeps the two paths from overlapping.
+    /// </summary>
+    private void OnMaterialTitleDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
+        {
+            e.Handled = true;
+            BeginRenameMaterial(row);
+        }
+    }
+
     private void OnRenameSaveClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
@@ -817,13 +925,16 @@ public sealed partial class MainWindow : Window
 
     private void OnMaterialsKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (_selectedRow is null)
+        if (_selectedRow is null || _selectedRow.IsEditing)
         {
             return;
         }
 
         var shiftDown = InputKeyboardSource
             .GetKeyStateForCurrentThread(VirtualKey.Shift)
+            .HasFlag(CoreVirtualKeyStates.Down);
+        var altDown = InputKeyboardSource
+            .GetKeyStateForCurrentThread(VirtualKey.Menu)
             .HasFlag(CoreVirtualKeyStates.Down);
 
         switch (e.Key)
@@ -836,6 +947,18 @@ public sealed partial class MainWindow : Window
             case VirtualKey.Delete:
                 e.Handled = true;
                 _workspace.DeleteMaterial(_selectedRow.Material);
+                break;
+
+            // Keyboard alternative to dragging, so reordering is not mouse-only (Windows UX
+            // guidance: don't make double-clicking and dragging the only way to act).
+            case VirtualKey.Up when altDown:
+                e.Handled = true;
+                _workspace.MoveMaterial(_selectedRow.Material, -1);
+                break;
+
+            case VirtualKey.Down when altDown:
+                e.Handled = true;
+                _workspace.MoveMaterial(_selectedRow.Material, 1);
                 break;
 
             case VirtualKey.Enter:
@@ -884,12 +1007,30 @@ public sealed partial class MainWindow : Window
         var copyPathItem = new MenuFlyoutItem { Text = "Скопировать путь" };
         copyPathItem.Click += (_, _) => _workspace.CopyMaterialPath(row.Material);
 
+        var rowIndex = _materialRows.IndexOf(row);
+        var moveUpItem = new MenuFlyoutItem
+        {
+            Text = "Переместить вверх",
+            IsEnabled = rowIndex > 0,
+        };
+        moveUpItem.Click += (_, _) => _workspace.MoveMaterial(row.Material, -1);
+
+        var moveDownItem = new MenuFlyoutItem
+        {
+            Text = "Переместить вниз",
+            IsEnabled = rowIndex >= 0 && rowIndex < _materialRows.Count - 1,
+        };
+        moveDownItem.Click += (_, _) => _workspace.MoveMaterial(row.Material, 1);
+
         var deleteItem = new MenuFlyoutItem { Text = "Удалить…" };
         deleteItem.Click += (_, _) => _workspace.DeleteMaterial(row.Material);
 
         flyout.Items.Add(openItem);
         flyout.Items.Add(renameItem);
         flyout.Items.Add(copyPathItem);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(moveUpItem);
+        flyout.Items.Add(moveDownItem);
         flyout.Items.Add(new MenuFlyoutSeparator());
         flyout.Items.Add(deleteItem);
         flyout.ShowAt(MaterialsList, new FlyoutShowOptions { Position = position });
@@ -950,10 +1091,93 @@ public sealed partial class MainWindow : Window
         return focused is TextBox or PasswordBox or RichEditBox or AutoSuggestBox;
     }
 
-    private void OnRootDragEnter(object sender, DragEventArgs e) => UpdateDropHighlight(true);
+    // ---- Reordering and external drag&drop ---------------------------------------------
+
+    private void OnMaterialsDragItemsStarting(object sender, DragItemsStartingEventArgs e)
+    {
+        // Reordering moves items within the same list, so the drag operation is a move (the
+        // WinUI Gallery reorder sample does the same in DragItemsStarting).
+        e.Data.RequestedOperation = DataPackageOperation.Move;
+        _internalReorderDrag = true;
+    }
+
+    private void OnMaterialsDragItemsCompleted(object sender, DragItemsCompletedEventArgs e)
+    {
+        _internalReorderDrag = false;
+        if (e.Items.Count > 0 && e.Items[0] is MaterialRow row)
+        {
+            _selectedRow = row;
+            MaterialsList.SelectedItem = row;
+        }
+
+        PersistMaterialOrder();
+    }
+
+    /// <summary>
+    /// Stores the current row order after a drag. The list is bound to an ObservableCollection, so
+    /// the built-in ListView reorder has already moved the rows in it; saving reads that order.
+    /// </summary>
+    private void PersistMaterialOrder()
+    {
+        if (_isUpdatingUi || _materialRows.Count == 0)
+        {
+            return;
+        }
+
+        _workspace.SaveMaterialOrder(_materialRows.Select(row => row.FileName).ToList());
+    }
+
+    // The ListView is a drop target for its own reordering; external files dropped onto it must
+    // keep bubbling to the same handlers the window uses, so the two drag kinds do not collide.
+    private void OnMaterialsDragEnter(object sender, DragEventArgs e)
+    {
+        if (!_internalReorderDrag)
+        {
+            OnRootDragEnter(sender, e);
+        }
+    }
+
+    private void OnMaterialsDragLeave(object sender, DragEventArgs e)
+    {
+        if (!_internalReorderDrag)
+        {
+            OnRootDragLeave(sender, e);
+        }
+    }
+
+    private void OnMaterialsDragOver(object sender, DragEventArgs e)
+    {
+        if (!_internalReorderDrag)
+        {
+            OnRootDragOver(sender, e);
+        }
+    }
+
+    private void OnMaterialsDrop(object sender, DragEventArgs e)
+    {
+        if (!_internalReorderDrag)
+        {
+            OnRootDrop(sender, e);
+        }
+    }
+
+    private void OnRootDragEnter(object sender, DragEventArgs e)
+    {
+        if (!_internalReorderDrag)
+        {
+            UpdateDropHighlight(true);
+        }
+    }
 
     private void OnRootDragOver(object sender, DragEventArgs e)
     {
+        // While the ListView reorders its own rows, the window must not reset AcceptedOperation:
+        // that cancels the built-in drop. External file drags fall through to the usual handling.
+        if (_internalReorderDrag)
+        {
+            return;
+        }
+
         if (e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             e.AcceptedOperation = DataPackageOperation.Copy;
@@ -968,11 +1192,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnRootDragLeave(object sender, DragEventArgs e) => UpdateDropHighlight(false);
+    private void OnRootDragLeave(object sender, DragEventArgs e)
+    {
+        if (!_internalReorderDrag)
+        {
+            UpdateDropHighlight(false);
+        }
+    }
 
     private async void OnRootDrop(object sender, DragEventArgs e)
     {
         UpdateDropHighlight(false);
+        if (_internalReorderDrag)
+        {
+            return;
+        }
+
         if (!e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             return;

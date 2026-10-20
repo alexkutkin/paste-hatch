@@ -66,6 +66,7 @@ public sealed class MaterialRow : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(NameVisibility));
             OnPropertyChanged(nameof(EditVisibility));
+            OnPropertyChanged(nameof(ActionsVisibility));
         }
     }
 
@@ -87,6 +88,9 @@ public sealed class MaterialRow : INotifyPropertyChanged
     public Visibility NameVisibility => _isEditing ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility EditVisibility => _isEditing ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Row action buttons are hidden while the inline rename editor is open.</summary>
+    public Visibility ActionsVisibility => _isEditing ? Visibility.Collapsed : Visibility.Visible;
 
     public void BeginEdit()
     {

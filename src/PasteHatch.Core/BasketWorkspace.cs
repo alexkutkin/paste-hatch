@@ -25,6 +25,7 @@ public sealed class BasketWorkspace
     private readonly TabNameFormatter _formatter;
 
     private readonly List<BasketTab> _tabs = [];
+    private readonly Dictionary<string, List<string>> _materialOrders = new(StringComparer.Ordinal);
     private List<Material> _activeMaterials = [];
     private string? _activeUid;
     private WindowPlacementState? _windowPlacement;
@@ -191,6 +192,7 @@ public sealed class BasketWorkspace
         }
 
         _tabs.RemoveAt(index);
+        _materialOrders.Remove(uid);
         if (string.Equals(_activeUid, uid, StringComparison.Ordinal))
         {
             _activeUid = _tabs[Math.Min(index, _tabs.Count - 1)].Uid;
@@ -198,6 +200,66 @@ public sealed class BasketWorkspace
 
         SetStatus($"Корзина «{tab.DisplayName}» отправлена в Корзину Windows.");
         Commit();
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the tab order produced by dragging a tab in the TabView. Unknown UIDs are ignored and
+    /// tabs missing from the list keep their relative order at the end, so a stale drag payload can
+    /// never hide an open basket. The UI already shows the new order, so no Changed event is raised.
+    /// </summary>
+    public bool ReorderTabs(IReadOnlyList<string> orderedUids)
+    {
+        if (orderedUids is null || orderedUids.Count == 0)
+        {
+            return false;
+        }
+
+        var remaining = new List<BasketTab>(_tabs);
+        var reordered = new List<BasketTab>(_tabs.Count);
+        foreach (var uid in orderedUids)
+        {
+            var index = remaining.FindIndex(tab => string.Equals(tab.Uid, uid, StringComparison.Ordinal));
+            if (index >= 0)
+            {
+                reordered.Add(remaining[index]);
+                remaining.RemoveAt(index);
+            }
+        }
+
+        reordered.AddRange(remaining);
+
+        if (reordered.Select(tab => tab.Uid).SequenceEqual(_tabs.Select(tab => tab.Uid), StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        _tabs.Clear();
+        _tabs.AddRange(reordered);
+        SaveStateQuietly();
+        return true;
+    }
+
+    /// <summary>Moves one tab by <paramref name="offset"/> positions and reports the change.</summary>
+    public bool MoveTab(string uid, int offset)
+    {
+        if (offset == 0)
+        {
+            return false;
+        }
+
+        var index = _tabs.FindIndex(tab => string.Equals(tab.Uid, uid, StringComparison.Ordinal));
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= _tabs.Count)
+        {
+            return false;
+        }
+
+        var moved = _tabs[index];
+        _tabs.RemoveAt(index);
+        _tabs.Insert(target, moved);
+        SaveStateQuietly();
+        RaiseChanged();
         return true;
     }
 
@@ -330,6 +392,8 @@ public sealed class BasketWorkspace
             return false;
         }
 
+        // Keep the user's order: the renamed file must stay in its slot, not move to the end.
+        UpdateMaterialOrderAfterRename(material.FileName, targetName);
         Commit();
         return true;
     }
@@ -361,6 +425,7 @@ public sealed class BasketWorkspace
         }
 
         SetStatus($"Файл «{material.FileName}» отправлен в Корзину Windows.");
+        RemoveMaterialFromOrder(material.FileName);
         Commit();
         return true;
     }
@@ -441,6 +506,88 @@ public sealed class BasketWorkspace
         }
     }
 
+    /// <summary>
+    /// Saves the user's material order for the active basket, e.g. after a drag reorder. Names that
+    /// are not in the basket (or are duplicated) are ignored, missing files are appended in their
+    /// current place, so the state file can never lose a material.
+    /// </summary>
+    public void SaveMaterialOrder(IReadOnlyList<string> orderedFileNames)
+    {
+        var tab = ActiveTab;
+        if (tab is null || orderedFileNames is null)
+        {
+            return;
+        }
+
+        var known = _activeMaterials
+            .Select(material => material.FileName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var order = new List<string>(_activeMaterials.Count);
+
+        foreach (var name in orderedFileNames)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(name);
+            if (!known.Contains(fileName) ||
+                order.Contains(fileName, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            order.Add(fileName);
+        }
+
+        foreach (var material in _activeMaterials)
+        {
+            if (!order.Contains(material.FileName, StringComparer.OrdinalIgnoreCase))
+            {
+                order.Add(material.FileName);
+            }
+        }
+
+        // Keep the in-memory list coherent with the saved order; the UI already shows this order
+        // after a drag, so no Changed event is raised (that would rebuild the rows mid-drag).
+        var byName = _activeMaterials.ToDictionary(
+            material => material.FileName,
+            StringComparer.OrdinalIgnoreCase);
+        _activeMaterials = order.Select(name => byName[name]).ToList();
+        _materialOrders[tab.Uid] = order;
+        SaveStateQuietly();
+    }
+
+    /// <summary>
+    /// Moves one material by <paramref name="offset"/> positions in the user's order and reports
+    /// the change so the list refreshes; used by the keyboard alternative to drag and drop.
+    /// </summary>
+    public bool MoveMaterial(Material material, int offset)
+    {
+        var tab = ActiveTab;
+        if (tab is null || offset == 0)
+        {
+            return false;
+        }
+
+        var index = _activeMaterials.FindIndex(candidate =>
+            string.Equals(candidate.FileName, material.FileName, StringComparison.OrdinalIgnoreCase));
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= _activeMaterials.Count)
+        {
+            return false;
+        }
+
+        var moved = _activeMaterials[index];
+        _activeMaterials.RemoveAt(index);
+        _activeMaterials.Insert(target, moved);
+        _materialOrders[tab.Uid] = _activeMaterials.Select(item => item.FileName).ToList();
+        SaveStateQuietly();
+        RaiseChanged();
+        return true;
+    }
+
     /// <summary>Re-reads the active basket folder, e.g. after an external agent changed it.</summary>
     public void Refresh()
     {
@@ -483,6 +630,7 @@ public sealed class BasketWorkspace
 
             var name = NormalizeDisplayName(saved.Name) ?? DefaultNameFor(directoryPath);
             _tabs.Add(new BasketTab(saved.Uid, name, directoryPath));
+            _materialOrders[saved.Uid] = NormalizeMaterialOrder(saved.MaterialOrder);
         }
 
         // Folders that exist on disk but not in the state file (lost state, crash after create)
@@ -696,12 +844,32 @@ public sealed class BasketWorkspace
 
         try
         {
-            _activeMaterials = new DirectoryInfo(tab.DirectoryPath)
+            // Creation order is the fallback for files nobody has ordered yet (fresh basket,
+            // files added externally); names present in the saved order keep the user's slots.
+            var files = new DirectoryInfo(tab.DirectoryPath)
                 .EnumerateFiles()
                 .OrderBy(file => file.CreationTimeUtc)
                 .ThenBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(file => new Material(file.Name, file.FullName, MaterialClassifier.Classify(file.Name)))
                 .ToList();
+
+            var byName = files.ToDictionary(material => material.FileName, StringComparer.OrdinalIgnoreCase);
+            var ordered = new List<Material>(files.Count);
+
+            if (_materialOrders.TryGetValue(tab.Uid, out var savedOrder))
+            {
+                foreach (var fileName in savedOrder)
+                {
+                    if (byName.Remove(fileName, out var material))
+                    {
+                        ordered.Add(material);
+                    }
+                }
+            }
+
+            ordered.AddRange(files.Where(material => byName.ContainsKey(material.FileName)));
+            _activeMaterials = ordered;
+            _materialOrders[tab.Uid] = ordered.Select(material => material.FileName).ToList();
         }
         catch (Exception)
         {
@@ -726,6 +894,60 @@ public sealed class BasketWorkspace
 
     private void SetStatus(string message) => StatusMessage = message;
 
+    private static List<string> NormalizeMaterialOrder(IEnumerable<string>? names)
+    {
+        var order = new List<string>();
+        if (names is null)
+        {
+            return order;
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(name);
+            if (fileName.Length > 0 && seen.Add(fileName))
+            {
+                order.Add(fileName);
+            }
+        }
+
+        return order;
+    }
+
+    private void UpdateMaterialOrderAfterRename(string oldFileName, string newFileName)
+    {
+        var tab = ActiveTab;
+        if (tab is null || !_materialOrders.TryGetValue(tab.Uid, out var order))
+        {
+            return;
+        }
+
+        var index = order.FindIndex(name => string.Equals(name, oldFileName, StringComparison.OrdinalIgnoreCase));
+        if (index >= 0)
+        {
+            order[index] = newFileName;
+        }
+        else
+        {
+            order.Add(newFileName);
+        }
+    }
+
+    private void RemoveMaterialFromOrder(string fileName)
+    {
+        var tab = ActiveTab;
+        if (tab is not null && _materialOrders.TryGetValue(tab.Uid, out var order))
+        {
+            order.RemoveAll(name => string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     private void SaveStateQuietly()
     {
         try
@@ -734,7 +956,14 @@ public sealed class BasketWorkspace
             {
                 Version = WorkspaceState.CurrentVersion,
                 ActiveUid = _activeUid,
-                Tabs = _tabs.Select(tab => new TabState { Uid = tab.Uid, Name = tab.DisplayName }).ToList(),
+                Tabs = _tabs.Select(tab => new TabState
+                {
+                    Uid = tab.Uid,
+                    Name = tab.DisplayName,
+                    MaterialOrder = _materialOrders.TryGetValue(tab.Uid, out var order)
+                        ? order.ToList()
+                        : [],
+                }).ToList(),
                 Window = _windowPlacement,
             });
         }
