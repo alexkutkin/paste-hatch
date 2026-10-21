@@ -64,12 +64,6 @@
                 Label="Новая папка"
                 ToolTipService.ToolTip="Создать папку (Ctrl+Shift+N)" />
             <AppBarButton
-                x:Name="RefreshButton"
-                Click="OnRefreshClick"
-                Icon="Refresh"
-                Label="Обновить"
-                ToolTipService.ToolTip="Перечитать корзину (F5)" />
-            <AppBarButton
                 x:Name="OpenFolderButton"
                 Click="OnOpenFolderClick"
                 Icon="Folder"
@@ -90,13 +84,13 @@
             </CommandBar.SecondaryCommands>
         </CommandBar>
 
-        <Grid Grid.Row="1" Margin="16,4,16,0">
+        <Grid x:Name="WorkspaceGrid" Grid.Row="1" Margin="16,4,16,0" SizeChanged="OnWorkspaceSizeChanged">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="RailColumn" Width="220" />
+                <ColumnDefinition x:Name="RailColumn" Width="220" MinWidth="160" />
                 <ColumnDefinition x:Name="RailSplitterColumn" Width="8" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" MinWidth="160" />
                 <ColumnDefinition x:Name="PreviewSplitterColumn" Width="8" />
-                <ColumnDefinition x:Name="PreviewColumn" Width="320" />
+                <ColumnDefinition x:Name="PreviewColumn" Width="320" MinWidth="200" />
             </Grid.ColumnDefinitions>
 
             <Grid Grid.Column="0" Margin="0,0,8,0">
@@ -248,6 +242,11 @@
                         RightTapped="OnTreeRightTapped"
                         SelectionChanged="OnTreeSelectionChanged"
                         SelectionMode="Single">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </TreeView.ItemContainerStyle>
                         <TreeView.ItemContainerTransitions>
                             <TransitionCollection />
                         </TreeView.ItemContainerTransitions>
@@ -259,13 +258,21 @@
                                     Background="Transparent"
                                     DoubleTapped="OnTreeEntryDoubleTapped"
                                     DragOver="OnTreeEntryDragOver"
-                                    Drop="OnTreeEntryDrop">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                    Drop="OnTreeEntryDrop"
+                                    PointerEntered="OnEntryPointerEntered"
+                                    PointerExited="OnEntryPointerExited"
+                                    ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
                                         <FontIcon
                                             FontSize="20"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Glyph="{Binding Content.Glyph}"
                                             VerticalAlignment="Center" />
+                                    <Grid Grid.Column="1">
                                         <StackPanel
                                             Spacing="1"
                                             VerticalAlignment="Center"
@@ -304,6 +311,37 @@
                                                 Click="OnNodeRenameCancelClick"
                                                 Content="Отмена" />
                                         </StackPanel>
+                                    </Grid>
+                                    <StackPanel
+                                        Grid.Column="2"
+                                        Margin="0,0,8,0"
+                                        Orientation="Horizontal"
+                                        Spacing="4"
+                                        Opacity="{Binding Content.ActionsOpacity}"
+                                        Visibility="{Binding Content.NameVisibility}"
+                                        VerticalAlignment="Center">
+                                        <Button
+                                            x:Name="EntryOpenButton"
+                                            Width="32" Height="32" Padding="0"
+                                            AutomationProperties.Name="Открыть"
+                                            ToolTipService.ToolTip="Открыть файл или папку"
+                                            Click="OnOpenEntryClick"
+                                            DoubleTapped="OnEntryActionDoubleTapped"
+                                            GotFocus="OnEntryActionGotFocus"
+                                            LostFocus="OnEntryActionLostFocus">
+                                            <FontIcon FontSize="14" Glyph="&#xE8A7;" />
+                                        </Button>
+                                        <Button
+                                            x:Name="EntryCopyPathButton"
+                                            Width="32" Height="32" Padding="0"
+                                            AutomationProperties.Name="Скопировать путь"
+                                            ToolTipService.ToolTip="Скопировать путь к файлу или папке"
+                                            Click="OnCopyEntryPathClick"
+                                            DoubleTapped="OnEntryActionDoubleTapped"
+                                            GotFocus="OnEntryActionGotFocus"
+                                            LostFocus="OnEntryActionLostFocus">
+                                            <FontIcon FontSize="14" Glyph="&#xE8C8;" />
+                                        </Button>
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>
@@ -351,6 +389,7 @@
                     Background="Transparent"
                     BorderThickness="0"
                     DragDelta="OnPreviewSplitterDragDelta"
+                    DragCompleted="OnPreviewSplitterDragCompleted"
                     HorizontalAlignment="Stretch" />
             </Grid>
 
@@ -358,22 +397,26 @@
                 x:Name="PreviewHost"
                 Grid.Column="4"
                 Margin="8,0,0,0">
-                <ScrollViewer>
-                    <StackPanel Padding="0,0,4,8" Spacing="8">
-                        <TextBlock
-                            x:Name="PreviewTitle"
-                            Style="{StaticResource SubtitleTextBlockStyle}"
-                            TextTrimming="CharacterEllipsis"
-                            TextWrapping="Wrap" />
-                        <TextBlock
-                            x:Name="PreviewMeta"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextWrapping="Wrap" />
+                <Grid Margin="0,0,4,8" RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock
+                        x:Name="PreviewTitle"
+                        Style="{StaticResource SubtitleTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="PreviewMeta"
+                        Grid.Row="1"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
+                    <Grid Grid.Row="2">
                         <Image
                             x:Name="PreviewImage"
-                            HorizontalAlignment="Left"
-                            MaxHeight="320"
                             Stretch="Uniform"
                             Visibility="Collapsed" />
                         <TextBox
@@ -384,8 +427,8 @@
                             BorderThickness="0"
                             IsReadOnly="True"
                             IsSpellCheckEnabled="False"
-                            MaxHeight="420"
                             Padding="0"
+                            VerticalAlignment="Stretch"
                             ScrollViewer.VerticalScrollBarVisibility="Auto"
                             TextWrapping="Wrap"
                             Visibility="Collapsed" />
@@ -394,25 +437,8 @@
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Text="Выберите файл, чтобы увидеть его содержимое."
                             TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button
-                                x:Name="PreviewOpenButton"
-                                Click="OnPreviewOpenClick"
-                                Content="Открыть"
-                                IsEnabled="False" />
-                            <Button
-                                x:Name="PreviewCopyPathButton"
-                                Click="OnPreviewCopyPathClick"
-                                Content="Скопировать путь"
-                                IsEnabled="False" />
-                        </StackPanel>
-                        <TextBlock
-                            x:Name="PreviewPath"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            TextWrapping="Wrap" />
-                    </StackPanel>
-                </ScrollViewer>
+                    </Grid>
+                </Grid>
             </Grid>
         </Grid>
 

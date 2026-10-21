@@ -87,4 +87,39 @@ public sealed class BasketWorkspaceWindowTests : IDisposable
         Assert.Equal(expected.Width, actual.Width);
         Assert.Equal(expected.Height, actual.Height);
     }
+
+    [Fact]
+    public void PreviewWidth_PersistsAcrossOtherChangesAndRestart()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        workspace.SavePreviewWidth(560.5);
+        workspace.CreateTab();
+        workspace.AddQuickNote("note");
+
+        var restarted = _harness.CreateInitializedWorkspace();
+
+        Assert.Equal(560.5, restarted.PreviewWidth);
+        Assert.Equal(560.5, _harness.ReadSavedState().PreviewWidth);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-10)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void PreviewWidth_InvalidResizeDoesNotReplaceSavedWidth(double width)
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        workspace.SavePreviewWidth(600);
+        workspace.SavePreviewWidth(width);
+
+        Assert.Equal(600, _harness.CreateInitializedWorkspace().PreviewWidth);
+    }
+
+    [Fact]
+    public void PreviewWidth_OldStateWithoutWidthUsesDefault()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        Assert.Null(workspace.PreviewWidth);
+    }
 }

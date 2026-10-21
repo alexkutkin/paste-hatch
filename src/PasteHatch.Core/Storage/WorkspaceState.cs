@@ -17,6 +17,9 @@ public sealed class WorkspaceState
     public List<TabState> Tabs { get; set; } = [];
 
     public WindowPlacementState? Window { get; set; }
+
+    /// <summary>Preferred preview width in device-independent pixels; absent in older state files.</summary>
+    public double? PreviewWidth { get; set; }
 }
 
 public sealed class TabState

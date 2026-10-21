@@ -41,6 +41,7 @@ public sealed class BasketWorkspace
     private List<Material> _activeMaterials = [];
     private string? _activeUid;
     private WindowPlacementState? _windowPlacement;
+    private double? _previewWidth;
 
     public BasketWorkspace(
         string basketsRoot,
@@ -222,6 +223,7 @@ public sealed class BasketWorkspace
 
         var state = _stateStore.Load();
         _windowPlacement = IsUsablePlacement(state.Window) ? state.Window : null;
+        _previewWidth = IsUsablePreviewWidth(state.PreviewWidth) ? state.PreviewWidth : null;
 
         _tabs.Clear();
         LoadTabs(state);
@@ -1071,6 +1073,16 @@ public sealed class BasketWorkspace
 
     public WindowPlacementState? WindowPlacement => _windowPlacement;
 
+    public double? PreviewWidth => _previewWidth;
+
+    /// <summary>Saves a completed preview resize independently of the window-placement setting.</summary>
+    public void SavePreviewWidth(double width)
+    {
+        if (!IsUsablePreviewWidth(width) || _previewWidth == width) return;
+        _previewWidth = width;
+        SaveStateQuietly();
+    }
+
     private void LoadTabs(WorkspaceState state)
     {
         var savedTabs = state.Tabs
@@ -1366,6 +1378,7 @@ public sealed class BasketWorkspace
                     SelectedFolder = _selectedFolders.TryGetValue(tab.Uid, out var folder) ? folder : string.Empty,
                 }).ToList(),
                 Window = _windowPlacement,
+                PreviewWidth = _previewWidth,
             });
         }
         catch (Exception ex)
@@ -1466,4 +1479,7 @@ public sealed class BasketWorkspace
 
     private static bool IsUsablePlacement(WindowPlacementState? placement)
         => placement is { Width: >= 400, Height: >= 300 };
+
+    private static bool IsUsablePreviewWidth(double? width)
+        => width is > 0 && double.IsFinite(width.Value);
 }

@@ -15,6 +15,8 @@ public sealed class EntryNode : INotifyPropertyChanged
 {
     private bool _isEditing;
     private string _editText;
+    private bool _actionsPointerOver;
+    private bool _actionsFocused;
 
     public EntryNode(BasketEntry entry)
     {
@@ -108,6 +110,20 @@ public sealed class EntryNode : INotifyPropertyChanged
     public Visibility NameVisibility => _isEditing ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility EditVisibility => _isEditing ? Visibility.Visible : Visibility.Collapsed;
+
+    public double ActionsOpacity => _actionsPointerOver || _actionsFocused ? 1 : 0;
+
+    public void SetActionsPointerOver(bool value)
+    {
+        _actionsPointerOver = value;
+        OnPropertyChanged(nameof(ActionsOpacity));
+    }
+
+    public void SetActionsFocused(bool value)
+    {
+        _actionsFocused = value;
+        OnPropertyChanged(nameof(ActionsOpacity));
+    }
 
     public void BeginEdit()
     {

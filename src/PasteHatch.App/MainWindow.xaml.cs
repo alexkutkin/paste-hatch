@@ -39,6 +39,9 @@ public sealed partial class MainWindow : Window
     private const double RailWidth = 220;
     private const double PreviewWidth = 320;
     private const double SplitterWidth = 8;
+    private const double MinRailWidth = 160;
+    private const double MinTreeWidth = 160;
+    private const double MinPreviewWidth = 200;
     private const int MaxTextPreviewCharacters = 64 * 1024;
 
     private static readonly CultureInfo UiCulture = CultureInfo.GetCultureInfo("ru-RU");
@@ -115,6 +118,7 @@ public sealed partial class MainWindow : Window
         try
         {
             _workspace.Initialize();
+            _previewWidth = _workspace.PreviewWidth ?? PreviewWidth;
         }
         catch (Exception ex)
         {
@@ -344,6 +348,7 @@ public sealed partial class MainWindow : Window
 
     private void OnRootLoaded(object sender, RoutedEventArgs e)
     {
+        ApplyPaneWidths();
         ApplyTheme();
         RefreshAll();
         UpdateAddButtonState();
@@ -392,14 +397,32 @@ public sealed partial class MainWindow : Window
 
     private void OnRailSplitterDragDelta(object sender, DragDeltaEventArgs e)
     {
-        _railWidth = Math.Clamp(_railWidth + e.HorizontalChange, 160, 360);
-        RailColumn.Width = new GridLength(_railWidth);
+        _railWidth += e.HorizontalChange;
+        ApplyPaneWidths();
     }
 
     private void OnPreviewSplitterDragDelta(object sender, DragDeltaEventArgs e)
     {
-        _previewWidth = Math.Clamp(_previewWidth - e.HorizontalChange, 240, 520);
-        PreviewColumn.Width = new GridLength(_previewWidth);
+        _previewWidth = PreviewColumn.ActualWidth - e.HorizontalChange;
+        ApplyPaneWidths();
+        _previewWidth = PreviewColumn.Width.Value;
+    }
+
+    private void OnPreviewSplitterDragCompleted(object sender, DragCompletedEventArgs e)
+        => _workspace.SavePreviewWidth(_previewWidth);
+
+    private void OnWorkspaceSizeChanged(object sender, SizeChangedEventArgs e) => ApplyPaneWidths();
+
+    private void ApplyPaneWidths()
+    {
+        var available = WorkspaceGrid.ActualWidth - 2 * SplitterWidth;
+        if (available <= 0) return;
+
+        var railMaximum = Math.Max(MinRailWidth, Math.Min(360, available - MinTreeWidth - MinPreviewWidth));
+        _railWidth = Math.Clamp(_railWidth, MinRailWidth, railMaximum);
+        var previewMaximum = Math.Max(MinPreviewWidth, available - _railWidth - MinTreeWidth);
+        RailColumn.Width = new GridLength(_railWidth);
+        PreviewColumn.Width = new GridLength(Math.Clamp(_previewWidth, MinPreviewWidth, previewMaximum));
     }
 
     // ---- Settings ----------------------------------------------------------------------
@@ -462,7 +485,6 @@ public sealed partial class MainWindow : Window
         var hasTab = tab is not null;
         PasteButton.IsEnabled = hasTab;
         NewFolderButton.IsEnabled = hasTab;
-        RefreshButton.IsEnabled = hasTab;
         OpenFolderButton.IsEnabled = hasTab;
         CopyPathButton.IsEnabled = hasTab;
         AddBasketButton.IsEnabled = _workspace.CanCreateTab;
@@ -1022,6 +1044,44 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnEntryPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TreeViewNode { Content: EntryNode entry } })
+            entry.SetActionsPointerOver(true);
+    }
+
+    private void OnEntryPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TreeViewNode { Content: EntryNode entry } })
+            entry.SetActionsPointerOver(false);
+    }
+
+    private void OnEntryActionGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TreeViewNode { Content: EntryNode entry } })
+            entry.SetActionsFocused(true);
+    }
+
+    private void OnEntryActionLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TreeViewNode { Content: EntryNode entry } })
+            entry.SetActionsFocused(false);
+    }
+
+    private void OnOpenEntryClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TreeViewNode { Content: EntryNode entry } })
+            _workspace.OpenEntry(entry.Entry);
+    }
+
+    private void OnCopyEntryPathClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TreeViewNode { Content: EntryNode entry } })
+            _workspace.CopyEntryPath(entry.Entry);
+    }
+
+    private void OnEntryActionDoubleTapped(object sender, DoubleTappedRoutedEventArgs e) => e.Handled = true;
+
     private void OnTreeKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.OriginalSource is TextBox || _selectedNode is null)
@@ -1284,9 +1344,6 @@ public sealed partial class MainWindow : Window
         PreviewText.Visibility = Visibility.Collapsed;
         PreviewPlaceholder.Text = "Выберите файл, чтобы увидеть его содержимое.";
         PreviewPlaceholder.Visibility = Visibility.Visible;
-        PreviewOpenButton.IsEnabled = node is not null;
-        PreviewCopyPathButton.IsEnabled = node is not null;
-        PreviewPath.Text = string.Empty;
 
         if (node is null)
         {
@@ -1299,7 +1356,6 @@ public sealed partial class MainWindow : Window
         PreviewMeta.Text = node.IsFolder
             ? "Папка"
             : $"{node.Entry.TypeLabel} · {node.SizeText} · {node.Entry.Modified.LocalDateTime.ToString("g", UiCulture)}";
-        PreviewPath.Text = node.FullPath;
 
         if (node.IsFolder)
         {
@@ -1366,37 +1422,6 @@ public sealed partial class MainWindow : Window
             }
         }
     }
-
-    private void OnPreviewOpenClick(object sender, RoutedEventArgs e)
-    {
-        if (_selectedNode is null)
-        {
-            return;
-        }
-
-        if (_selectedNode.IsFolder)
-        {
-            _workspace.OpenFolderInExplorer(_selectedNode.Entry);
-        }
-        else if (_selectedNode.Material is not null)
-        {
-            _workspace.OpenMaterial(_selectedNode.Material);
-        }
-    }
-
-    private void OnPreviewCopyPathClick(object sender, RoutedEventArgs e)
-    {
-        if (_selectedNode is not null)
-        {
-            _workspace.CopyEntryPath(_selectedNode.Entry);
-        }
-        else
-        {
-            _workspace.CopyActiveBasketPath();
-        }
-    }
-
-    // ---- Clipboard, drag and drop, quick note -----------------------------------------
 
     private void OnPasteClick(object sender, RoutedEventArgs e) => PasteIntoCurrentFolder();
 
@@ -1513,8 +1538,6 @@ public sealed partial class MainWindow : Window
             }
         });
     }
-
-    private void OnRefreshClick(object sender, RoutedEventArgs e) => _workspace.Refresh();
 
     private void OnRefreshAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {

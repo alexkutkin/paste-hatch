@@ -75,6 +75,7 @@ try {
         $null -ne $script:window -and $null -ne (Find-Control 'QuickNoteTextBox') -and (Test-Path (Join-Path $data 'state.json'))
     }
     Doctor
+    Wait-For 'refresh button removed from toolbar' { $null -eq (Find-Control 'RefreshButton') }
     @{pid=$app.Id; started=$app.StartTime.ToString('o'); exe=$app.Path; sha256=(Get-FileHash $exe).Hash; data=$data} | ConvertTo-Json | Set-Content (Join-Path $run 'doctor.json')
     $basket = @(Get-ChildItem (Join-Path $data 'Baskets') -Directory)
     if ($basket.Count -ne 1) { throw 'Expected one initial basket.' }
@@ -104,14 +105,35 @@ try {
         (Find-Control 'PreviewTitle').Current.Name -eq 'inside.txt' -and
         (Find-Control 'PreviewText').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'inside content'
     }
+    Wait-For 'preview uses available panel height' {
+        $previewBounds = (Find-Control 'PreviewText').Current.BoundingRectangle
+        $treeBounds = (Find-Control 'FileTree').Current.BoundingRectangle
+        $previewBounds.Height -gt 0 -and [Math]::Abs($previewBounds.Bottom - $treeBounds.Bottom) -le 24
+    }
+    Wait-For 'preview has no action buttons or path footer' {
+        $null -eq (Find-Control 'PreviewOpenButton') -and
+        $null -eq (Find-Control 'PreviewCopyPathButton') -and $null -eq (Find-Control 'PreviewPath')
+    }
     Snapshot 'preview'
     # Materialize formats before modifying the shared clipboard, then restore in finally.
     $originalClipboard = [Windows.Forms.DataObject]::new()
     $clipboard = [Windows.Forms.Clipboard]::GetDataObject()
     if ($clipboard) { foreach ($format in $clipboard.GetFormats($false)) { $originalClipboard.SetData($format,$false,$clipboard.GetData($format,$false)) } }
     $clipboardSaved = $true
-    Invoke-Control 'PreviewCopyPathButton'
-    Wait-For 'copy path equals selected file path' { [Windows.Forms.Clipboard]::GetText() -eq (Join-Path $basket 'folder2\inside.txt') }
+    foreach ($entry in @(@{name='inside.txt'; path=(Join-Path $basket 'folder2\inside.txt')}, @{name='folder2'; path=(Join-Path $basket 'folder2')})) {
+        "ACTION invoke row copy path: $($entry.name)" | Add-Content (Join-Path $run 'actions.txt')
+        $rowCopy = (Find-Node $entry.name).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryCopyPathButton'))
+        if (!$rowCopy) { throw "Missing copy path button for $($entry.name)" }
+        $rowOpen = (Find-Node $entry.name).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryOpenButton'))
+        if (!$rowOpen -or !$rowOpen.Current.IsEnabled) { throw "Missing enabled open button for $($entry.name)" }
+        Wait-For "row actions have right padding for $($entry.name)" {
+            (Find-Node $entry.name).Current.BoundingRectangle.Right - $rowCopy.Current.BoundingRectangle.Right -ge 8
+        }
+        $rowCopy.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+        Wait-For "row copy path equals $($entry.name) path" { [Windows.Forms.Clipboard]::GetText() -eq $entry.path }
+    }
     $expectedPaste = 'pasted-' + [guid]::NewGuid().ToString('N')
     "ACTION clipboard text=$expectedPaste" | Add-Content (Join-Path $run 'actions.txt')
     [Windows.Forms.Clipboard]::SetText($expectedPaste)
