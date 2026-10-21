@@ -26,15 +26,6 @@ public sealed class BasketWorkspace
         AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
     };
 
-    private static readonly EnumerationOptions CopyEntriesOptions = new()
-    {
-        RecurseSubdirectories = false,
-        IgnoreInaccessible = true,
-        ReturnSpecialDirectories = false,
-        // A copied folder keeps its hidden files; only reparse points are skipped.
-        AttributesToSkip = FileAttributes.ReparsePoint,
-    };
-
     private readonly string _basketsRoot;
     private readonly ITabStateStore _stateStore;
     private readonly IClipboardReader _clipboard;
@@ -42,6 +33,7 @@ public sealed class BasketWorkspace
     private readonly IConfirmationService _confirmations;
     private readonly IClock _clock;
     private readonly TabNameFormatter _formatter;
+    private readonly FileTransfer _transfers;
 
     private readonly List<BasketTab> _tabs = [];
     private readonly Dictionary<string, string> _selectedFolders = new(StringComparer.Ordinal);
@@ -63,12 +55,13 @@ public sealed class BasketWorkspace
         _stateStore = stateStore;
         _clipboard = clipboard;
         _shell = shell;
+        _transfers = new FileTransfer(shell);
         _confirmations = confirmations;
         _clock = clock ?? SystemClock.Instance;
         _formatter = formatter ?? TabNameFormatter.Default;
     }
 
-    public event EventHandler? Changed;
+    public event EventHandler<WorkspaceChange>? Changed;
 
     public IReadOnlyList<BasketTab> Tabs => _tabs;
 
@@ -242,7 +235,7 @@ public sealed class BasketWorkspace
         SelectedFolder = _selectedFolders.TryGetValue(_activeUid!, out var folder) ? folder : string.Empty;
         RefreshEntries();
         SaveStateQuietly();
-        RaiseChanged();
+        RaiseChanged(WorkspaceChangeKind.View);
     }
 
     public BasketTab? CreateTab()
@@ -286,7 +279,7 @@ public sealed class BasketWorkspace
 
         _activeUid = uid;
         SelectedFolder = _selectedFolders.TryGetValue(uid, out var folder) ? folder : string.Empty;
-        Commit();
+        Commit(WorkspaceChangeKind.View);
         return true;
     }
 
@@ -316,7 +309,7 @@ public sealed class BasketWorkspace
         }
 
         _tabs[index] = _tabs[index] with { DisplayName = trimmed };
-        Commit();
+        Commit(WorkspaceChangeKind.View);
         return true;
     }
 
@@ -422,7 +415,7 @@ public sealed class BasketWorkspace
         _tabs.RemoveAt(index);
         _tabs.Insert(target, moved);
         SaveStateQuietly();
-        RaiseChanged();
+        RaiseChanged(WorkspaceChangeKind.View);
         return true;
     }
 
@@ -465,7 +458,7 @@ public sealed class BasketWorkspace
         _selectedFolders[tab.Uid] = normalized;
         RefreshEntries();
         SaveStateQuietly();
-        RaiseChanged();
+        RaiseChanged(WorkspaceChangeKind.View);
         return true;
     }
 
@@ -522,28 +515,6 @@ public sealed class BasketWorkspace
 
     // ---- Clipboard and adding materials ----------------------------------------------------
 
-    /// <summary>Reads the clipboard once, reporting an error instead of throwing.</summary>
-    public PastePayload ReadClipboard()
-    {
-        return TryReadClipboard(out var payload) ? payload : PastePayload.None;
-    }
-
-    /// <summary>Reads the clipboard and tells the caller whether reading succeeded.</summary>
-    public bool TryReadClipboard(out PastePayload payload)
-    {
-        try
-        {
-            payload = _clipboard.Read();
-            return true;
-        }
-        catch (Exception ex)
-        {
-            payload = PastePayload.None;
-            ReportError($"Не удалось прочитать буфер обмена: {ex.Message}");
-            return false;
-        }
-    }
-
     /// <summary>Handles a single Ctrl+V; returns how many materials were added.</summary>
     public int AddFromClipboard() => AddFromClipboard(SelectedFolder);
 
@@ -568,6 +539,7 @@ public sealed class BasketWorkspace
     public int AddPayload(PastePayload payload, string? targetRelativeFolder)
     {
         ArgumentNullException.ThrowIfNull(payload);
+        if (payload.Kind != PasteContentKind.Files) _transfers.ForgetClipboard();
 
         var targetDirectory = ResolveTargetDirectory(targetRelativeFolder);
         if (ActiveTab is null || targetDirectory is null)
@@ -578,7 +550,7 @@ public sealed class BasketWorkspace
         switch (payload.Kind)
         {
             case PasteContentKind.Files:
-                return AddFilesCore(payload.Files, targetDirectory.Folder, targetDirectory.Path, skipFilesAlreadyInBasket: true);
+                return TransferFiles(payload.Files, targetDirectory, _transfers.ClipboardIntent(payload.Files));
 
             case PasteContentKind.Image:
                 return AddImage(payload.ImagePng, targetDirectory.Path);
@@ -605,7 +577,7 @@ public sealed class BasketWorkspace
             return 0;
         }
 
-        return AddFilesCore(paths, targetDirectory.Folder, targetDirectory.Path, skipFilesAlreadyInBasket: true);
+        return TransferFiles(paths, targetDirectory, FileTransferIntent.Import);
     }
 
     /// <summary>
@@ -627,9 +599,7 @@ public sealed class BasketWorkspace
             return 0;
         }
 
-        return move
-            ? MoveFilesCore(paths, targetDirectory.Folder, targetDirectory.Path)
-            : CopyFilesCore(paths, targetDirectory.Folder, targetDirectory.Path);
+        return TransferFiles(paths, targetDirectory, move ? FileTransferIntent.Move : FileTransferIntent.Copy);
     }
 
     /// <summary>Saves the quick-note text as a .txt file named after the current day and time.</summary>
@@ -684,7 +654,7 @@ public sealed class BasketWorkspace
         try
         {
             Directory.CreateDirectory(parent);
-            var freeName = ensureUnique ? UniqueDirectoryName(parent, cleaned) : cleaned;
+            var freeName = ensureUnique ? FileTransfer.UniqueDirectoryName(parent, cleaned) : cleaned;
             var fullPath = Path.Combine(parent, freeName);
             if (Directory.Exists(fullPath) || File.Exists(fullPath))
             {
@@ -1045,59 +1015,12 @@ public sealed class BasketWorkspace
             return false;
         }
 
-        var sourceParent = Path.GetDirectoryName(entry.FullPath);
-        if (sourceParent is null)
-        {
-            return false;
-        }
-
-        if (string.Equals(Path.GetFullPath(sourceParent), Path.GetFullPath(target.Path), StringComparison.OrdinalIgnoreCase))
+        if (FileTransfer.SameDirectory(Path.GetDirectoryName(entry.FullPath), target.Path))
         {
             return true;
         }
 
-        if (entry.IsFolder && IsSameOrInside(target.Path, entry.FullPath))
-        {
-            ReportError("Нельзя переместить папку внутрь себя.");
-            return false;
-        }
-
-        try
-        {
-            if (entry.IsFolder)
-            {
-                if (!Directory.Exists(entry.FullPath))
-                {
-                    ReportError($"Папка «{entry.Name}» не найдена.");
-                    RefreshAndNotify();
-                    return false;
-                }
-
-                var destination = Path.Combine(target.Path, UniqueDirectoryName(target.Path, entry.Name));
-                Directory.Move(entry.FullPath, destination);
-            }
-            else
-            {
-                if (!File.Exists(entry.FullPath))
-                {
-                    ReportError($"Файл «{entry.Name}» не найден.");
-                    RefreshAndNotify();
-                    return false;
-                }
-
-                var destination = Path.Combine(target.Path, MaterialNaming.UniqueFileName(target.Path, entry.Name));
-                File.Move(entry.FullPath, destination);
-            }
-        }
-        catch (Exception ex)
-        {
-            ReportError($"Не удалось переместить «{entry.Name}»: {ex.Message}");
-            return false;
-        }
-
-        SetStatus($"«{entry.Name}» {(entry.IsFolder ? "перемещена" : "перемещён")} в «{DisplayFolderName(target.Folder)}».");
-        Commit();
-        return true;
+        return TransferFiles([entry.FullPath], target, FileTransferIntent.Move) == 1;
     }
 
     /// <summary>Moves several already resolved paths (a cut) into a folder.</summary>
@@ -1116,7 +1039,7 @@ public sealed class BasketWorkspace
             return 0;
         }
 
-        return MoveFilesCore(paths, target.Folder, target.Path);
+        return TransferFiles(paths, target, FileTransferIntent.Move);
     }
 
     // ---- Refresh and state -----------------------------------------------------------------
@@ -1125,7 +1048,7 @@ public sealed class BasketWorkspace
     public void Refresh()
     {
         RefreshEntries();
-        RaiseChanged();
+        RaiseChanged(WorkspaceChangeKind.View);
     }
 
     /// <summary>Publishes an informational status message (clipboard operations from the UI).</summary>
@@ -1229,293 +1152,37 @@ public sealed class BasketWorkspace
         throw new InvalidOperationException("Не удалось подобрать свободный UID для корзины.");
     }
 
-    private int AddFilesCore(
-        IReadOnlyList<string> paths,
-        string targetFolder,
-        string targetDirectory,
-        bool skipFilesAlreadyInBasket)
+    private int TransferFiles(IReadOnlyList<string> paths, TargetFolder target, FileTransferIntent intent)
     {
         var tab = ActiveTab;
-        if (tab is null)
+        if (tab is null) return 0;
+
+        var result = _transfers.Execute(paths, tab.DirectoryPath, target.Path, target.Folder, intent);
+        SetStatus(result.Status);
+        if (result.Problems.Count > 0)
         {
-            return 0;
+            ReportError(string.Join(Environment.NewLine, result.Problems.Take(6)));
         }
-
-        if (paths.Count == 0)
-        {
-            SetStatus("Нет файлов для добавления.");
-            RaiseChanged();
-            return 0;
-        }
-
-        var addedFiles = 0;
-        var addedFolders = 0;
-        var skipped = 0;
-        var problems = new List<string>();
-
-        foreach (var path in paths)
-        {
-            try
-            {
-                if (Directory.Exists(path))
-                {
-                    if (new DirectoryInfo(path).Attributes.HasFlag(FileAttributes.ReparsePoint))
-                    {
-                        problems.Add($"«{Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar))}» — ссылка на папку; такие папки не копируются.");
-                        continue;
-                    }
-
-                    if (IsSameOrInside(path, tab.DirectoryPath))
-                    {
-                        skipped++;
-                        continue;
-                    }
-
-                    if (IsSameOrInside(targetDirectory, path))
-                    {
-                        problems.Add($"Нельзя скопировать папку «{Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar))}» внутрь себя.");
-                        continue;
-                    }
-
-                    var sourceName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
-                    if (sourceName.Length == 0)
-                    {
-                        problems.Add("Нельзя копировать корень диска.");
-                        continue;
-                    }
-
-                    var folderName = UniqueDirectoryName(targetDirectory, sourceName);
-                    CopyDirectoryRecursive(path, Path.Combine(targetDirectory, folderName));
-                    addedFolders++;
-                    continue;
-                }
-
-                if (!File.Exists(path))
-                {
-                    problems.Add($"Файл не найден: {path}");
-                    continue;
-                }
-
-                if (skipFilesAlreadyInBasket && IsSameOrInside(path, tab.DirectoryPath))
-                {
-                    skipped++;
-                    continue;
-                }
-
-                var destinationName = MaterialNaming.UniqueFileName(targetDirectory, Path.GetFileName(path));
-                var destinationPath = Path.Combine(targetDirectory, destinationName);
-                if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(destinationPath), StringComparison.OrdinalIgnoreCase))
-                {
-                    skipped++;
-                    continue;
-                }
-
-                File.Copy(path, destinationPath, overwrite: false);
-                addedFiles++;
-            }
-            catch (Exception ex)
-            {
-                problems.Add($"{Path.GetFileName(path)}: {ex.Message}");
-            }
-        }
-
-        var added = addedFiles + addedFolders;
-        var status = addedFolders > 0
-            ? added == 0
-                ? "Элементы не добавлены."
-                : $"Добавлено {RussianPlural.Items(added)}."
-            : (added, skipped) switch
-            {
-                (0, > 0) => "Файлы уже находятся в этой корзине.",
-                (0, _) => "Материалы не добавлены.",
-                (1, 0) => "Добавлен 1 файл.",
-                (1, > 0) => "Добавлен 1 файл (часть файлов уже была в корзине).",
-                (_, 0) => $"Добавлено {added} {RussianPlural.Noun(added, "файл", "файла", "файлов")}.",
-                _ => $"Добавлено {added} {RussianPlural.Noun(added, "файл", "файла", "файлов")} (часть файлов уже была в корзине).",
-            };
-
-        SetStatus(status);
+        // Publish once, after status and partial failures are final.
         Commit();
-
-        if (problems.Count > 0)
-        {
-            ReportError(string.Join(Environment.NewLine, problems.Take(6)));
-        }
-
-        return added;
+        return result.Completed;
     }
 
-    private int CopyFilesCore(IReadOnlyList<string> paths, string targetFolder, string targetDirectory)
+    /// <summary>Publishes a file selection and remembers its paste intent outside the window.</summary>
+    public void CopyEntryToClipboard(BasketEntry entry, bool move)
     {
-        var added = 0;
-        var problems = new List<string>();
-
-        foreach (var path in paths)
+        if (entry.RelativePath.Length == 0) return;
+        try
         {
-            try
-            {
-                if (Directory.Exists(path))
-                {
-                    if (new DirectoryInfo(path).Attributes.HasFlag(FileAttributes.ReparsePoint))
-                    {
-                        problems.Add($"«{Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar))}» — ссылка на папку; такие папки не копируются.");
-                        continue;
-                    }
-
-                    if (IsSameOrInside(targetDirectory, path))
-                    {
-                        problems.Add($"Нельзя скопировать папку «{Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar))}» внутрь себя.");
-                        continue;
-                    }
-
-                    var sourceName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
-                    if (sourceName.Length == 0)
-                    {
-                        problems.Add("Нельзя копировать корень диска.");
-                        continue;
-                    }
-
-                    var folderName = UniqueDirectoryName(targetDirectory, sourceName);
-                    CopyDirectoryRecursive(path, Path.Combine(targetDirectory, folderName));
-                    added++;
-                    continue;
-                }
-
-                if (!File.Exists(path))
-                {
-                    problems.Add($"Файл не найден: {path}");
-                    continue;
-                }
-
-                var destinationName = MaterialNaming.UniqueFileName(targetDirectory, Path.GetFileName(path));
-                var destinationPath = Path.Combine(targetDirectory, destinationName);
-                if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(destinationPath), StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                File.Copy(path, destinationPath, overwrite: false);
-                added++;
-            }
-            catch (Exception ex)
-            {
-                problems.Add($"{Path.GetFileName(path)}: {ex.Message}");
-            }
+            string[] paths = [entry.FullPath];
+            _shell.CopyFilesToClipboard(paths, move);
+            _transfers.RememberClipboard(paths, move);
+            ReportStatus($"«{entry.Name}» {(move ? "вырезан" : "скопирован")} в буфер обмена.");
         }
-
-        SetStatus(added == 0
-            ? "Элементы не скопированы."
-            : $"Скопировано {RussianPlural.Items(added)} в «{DisplayFolderName(targetFolder)}».");
-        Commit();
-
-        if (problems.Count > 0)
+        catch (Exception ex)
         {
-            ReportError(string.Join(Environment.NewLine, problems.Take(6)));
+            ReportError($"Не удалось скопировать в буфер обмена: {ex.Message}");
         }
-
-        return added;
-    }
-
-    private int MoveFilesCore(IReadOnlyList<string> paths, string targetFolder, string targetDirectory)
-    {
-        var tab = ActiveTab;
-        if (tab is null)
-        {
-            return 0;
-        }
-
-        var moved = 0;
-        var problems = new List<string>();
-
-        foreach (var path in paths)
-        {
-            try
-            {
-                var sourceParent = Path.GetDirectoryName(path.TrimEnd(
-                    Path.DirectorySeparatorChar,
-                    Path.AltDirectorySeparatorChar));
-                if (sourceParent is not null &&
-                    string.Equals(
-                        Path.GetFullPath(sourceParent),
-                        Path.GetFullPath(targetDirectory),
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    // Dropping an item onto the folder it already lives in is a no-op, not a copy.
-                    continue;
-                }
-
-                if (Directory.Exists(path))
-                {
-                    if (IsSameOrInside(targetDirectory, path))
-                    {
-                        problems.Add($"Нельзя переместить папку «{Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar))}» внутрь себя.");
-                        continue;
-                    }
-
-                    var sourceName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
-                    if (sourceName.Length == 0)
-                    {
-                        problems.Add("Нельзя копировать корень диска.");
-                        continue;
-                    }
-
-                    var folderName = UniqueDirectoryName(targetDirectory, sourceName);
-                    var destination = Path.Combine(targetDirectory, folderName);
-                    if (IsSameOrInside(path, tab.DirectoryPath))
-                    {
-                        if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        Directory.Move(path, destination);
-                    }
-                    else
-                    {
-                        CopyDirectoryRecursive(path, destination);
-                        _shell.RecycleDirectory(path);
-                    }
-
-                    moved++;
-                    continue;
-                }
-
-                if (!File.Exists(path))
-                {
-                    problems.Add($"Файл не найден: {path}");
-                    continue;
-                }
-
-                var destinationName = MaterialNaming.UniqueFileName(targetDirectory, Path.GetFileName(path));
-                var destinationFile = Path.Combine(targetDirectory, destinationName);
-                if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(destinationFile), StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                // File.Move supports cross-volume moves on modern .NET, so this works both for
-                // paths inside the basket and for a cut pasted from Explorer.
-                File.Move(path, destinationFile);
-
-                moved++;
-            }
-            catch (Exception ex)
-            {
-                problems.Add($"{Path.GetFileName(path)}: {ex.Message}");
-            }
-        }
-
-        SetStatus(moved == 0
-            ? "Элементы не перемещены."
-            : $"Перемещено {RussianPlural.Items(moved)} в «{DisplayFolderName(targetFolder)}».");
-        Commit();
-
-        if (problems.Count > 0)
-        {
-            ReportError(string.Join(Environment.NewLine, problems.Take(6)));
-        }
-
-        return moved;
     }
 
     private int AddImage(byte[]? pngBytes, string targetDirectory)
@@ -1632,14 +1299,14 @@ public sealed class BasketWorkspace
     private void RefreshAndNotify()
     {
         RefreshEntries();
-        RaiseChanged();
+        RaiseChanged(WorkspaceChangeKind.View);
     }
 
-    private void Commit()
+    private void Commit(WorkspaceChangeKind kind = WorkspaceChangeKind.Contents)
     {
         RefreshEntries();
         SaveStateQuietly();
-        RaiseChanged();
+        RaiseChanged(kind);
     }
 
     private void SetStatus(string message)
@@ -1662,7 +1329,8 @@ public sealed class BasketWorkspace
         }
     }
 
-    private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+    private void RaiseChanged(WorkspaceChangeKind kind = WorkspaceChangeKind.Status)
+        => Changed?.Invoke(this, new WorkspaceChange(kind));
 
     private string DefaultNameFor(string directoryPath)
     {
@@ -1794,59 +1462,6 @@ public sealed class BasketWorkspace
         return trimmed.Length > MaxTabNameLength
             ? trimmed[..MaxTabNameLength].TrimEnd()
             : trimmed;
-    }
-
-    private static bool IsSameOrInside(string path, string directoryPath)
-    {
-        try
-        {
-            var root = Path.GetFullPath(directoryPath)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var candidate = Path.GetFullPath(path)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-            return string.Equals(candidate, root, StringComparison.OrdinalIgnoreCase) ||
-                candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-
-    private static string UniqueDirectoryName(string directory, string desiredName)
-    {
-        var candidate = desiredName;
-        var counter = 2;
-
-        while (Directory.Exists(Path.Combine(directory, candidate)) ||
-               File.Exists(Path.Combine(directory, candidate)))
-        {
-            candidate = $"{desiredName} ({counter})";
-            counter++;
-
-            if (counter > 9999)
-            {
-                throw new IOException($"Не удалось подобрать свободное имя папки для «{desiredName}».");
-            }
-        }
-
-        return candidate;
-    }
-
-    private static void CopyDirectoryRecursive(string source, string destination)
-    {
-        Directory.CreateDirectory(destination);
-
-        foreach (var file in Directory.EnumerateFiles(source, "*", CopyEntriesOptions))
-        {
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: false);
-        }
-
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", CopyEntriesOptions))
-        {
-            CopyDirectoryRecursive(directory, Path.Combine(destination, Path.GetFileName(directory)));
-        }
     }
 
     private static bool IsUsablePlacement(WindowPlacementState? placement)

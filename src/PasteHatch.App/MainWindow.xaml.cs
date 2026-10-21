@@ -49,7 +49,7 @@ public sealed partial class MainWindow : Window
     private readonly SettingsStore _settingsStore;
     private readonly AppWindow _appWindow;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _placementTimer;
-    private readonly FolderWatcher _folderWatcher = new();
+    private readonly WorkspaceRefreshCoordinator _liveRefresh;
     private readonly ObservableCollection<BasketRow> _basketRows = new();
     private readonly List<string> _internalDragPaths = [];
 
@@ -57,16 +57,11 @@ public sealed partial class MainWindow : Window
     private TrayIcon? _tray;
     private SettingsWindow? _settingsWindow;
     private EntryNode? _selectedNode;
-    private List<string>? _copyPaths;
-    private List<string>? _cutPaths;
+    private readonly BasketTreeNavigation _treeNavigation;
     private string? _basketSignature;
     private string? _editingBasketUid;
-    private string? _watchedUid;
     private string? _startupError;
     private bool _startupErrorReported;
-    private bool _watcherRunning;
-    private bool _refreshScheduled;
-    private bool _refreshingFromWatcher;
     private bool _isBasketDrag;
     private bool _isUpdatingUi;
     private bool _isExiting;
@@ -101,10 +96,9 @@ public sealed partial class MainWindow : Window
             clipboard,
             _shell,
             _confirmations);
-        _workspace.Changed += OnWorkspaceChanged;
-
-        _folderWatcher.Changed += OnFolderWatcherChanged;
-        _folderWatcher.Error += OnFolderWatcherError;
+        _treeNavigation = new BasketTreeNavigation(_workspace);
+        _liveRefresh = new WorkspaceRefreshCoordinator(_workspace, new FolderWatcher(),
+            action => DispatcherQueue.TryEnqueue(() => action()), RefreshAll);
 
         ConfigureWindowShell();
 
@@ -183,8 +177,7 @@ public sealed partial class MainWindow : Window
         if (_testOffscreen)
         {
             NativeWindow.ShowWithoutActivation(GetWindowHandle());
-            _workspace.Refresh();
-            StartWatcher();
+            _liveRefresh.SetVisible(true);
             return;
         }
 
@@ -196,8 +189,7 @@ public sealed partial class MainWindow : Window
 
         Activate();
         NativeWindow.BringToForeground(GetWindowHandle());
-        _workspace.Refresh();
-        StartWatcher();
+        _liveRefresh.SetVisible(true);
     }
 
     public void ReportUnexpectedError(Exception exception)
@@ -228,7 +220,7 @@ public sealed partial class MainWindow : Window
 
     private void HideToTray()
     {
-        StopWatcher();
+        _liveRefresh.SetVisible(false);
         _workspace.SaveState();
         PersistWindowPlacement();
         _appWindow.Hide();
@@ -241,7 +233,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        StopWatcher();
+        _liveRefresh.SetVisible(false);
         _workspace.SaveState();
         PersistWindowPlacement();
         _isExiting = true;
@@ -259,7 +251,7 @@ public sealed partial class MainWindow : Window
             _tray = null;
         }
 
-        _folderWatcher.Dispose();
+        _liveRefresh.Dispose();
         Application.Current.Exit();
     }
 
@@ -355,7 +347,7 @@ public sealed partial class MainWindow : Window
         ApplyTheme();
         RefreshAll();
         UpdateAddButtonState();
-        StartWatcher();
+        _liveRefresh.SetVisible(NativeWindow.IsVisible(GetWindowHandle()));
 
         if (_startupError is not null && !_startupErrorReported)
         {
@@ -433,103 +425,9 @@ public sealed partial class MainWindow : Window
         NativeWindow.SetAlwaysOnTop(GetWindowHandle(), settings.AlwaysOnTop);
     }
 
-    // ---- File watcher ------------------------------------------------------------------
+    // ---- Presentation ---------------------------------------------------------------
 
-    private void StartWatcher()
-    {
-        var tab = _workspace.ActiveTab;
-        if (tab is null)
-        {
-            StopWatcher();
-            return;
-        }
-
-        if (_watcherRunning && string.Equals(_watchedUid, tab.Uid, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        try
-        {
-            _folderWatcher.Watch(tab.DirectoryPath);
-            _watchedUid = tab.Uid;
-            _watcherRunning = true;
-        }
-        catch (Exception ex)
-        {
-            _watcherRunning = false;
-            _watchedUid = null;
-            _workspace.ReportStatus($"Не удалось включить наблюдение за папкой: {ex.Message}");
-        }
-    }
-
-    private void StopWatcher()
-    {
-        _folderWatcher.Stop();
-        _watcherRunning = false;
-        _watchedUid = null;
-    }
-
-    private void OnFolderWatcherChanged(object? sender, EventArgs e)
-    {
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (!_isExiting)
-            {
-                _refreshingFromWatcher = true;
-                try
-                {
-                    _workspace.Refresh();
-                }
-                finally
-                {
-                    _refreshingFromWatcher = false;
-                }
-            }
-        });
-    }
-
-    private void OnFolderWatcherError(object? sender, EventArgs e)
-    {
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_isExiting)
-            {
-                return;
-            }
-
-            // Buffer overflow or a directory replaced on disk: rebuild the watcher and rescan once.
-            _watcherRunning = false;
-            _watchedUid = null;
-            StartWatcher();
-            _workspace.Refresh();
-        });
-    }
-
-    // ---- Workspace change handling -----------------------------------------------------
-
-    private void OnWorkspaceChanged(object? sender, EventArgs e)
-    {
-        // Internal paste/move/delete: do not refresh again when our own watcher event arrives.
-        if (!_refreshingFromWatcher)
-        {
-            _folderWatcher.SuspendFor(TimeSpan.FromSeconds(1));
-        }
-
-        if (_refreshScheduled)
-        {
-            return;
-        }
-
-        _refreshScheduled = true;
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            _refreshScheduled = false;
-            RefreshAll();
-        });
-    }
-
-    private void RefreshAll()
+    private void RefreshAll(bool refreshTree = true)
     {
         if (_isUpdatingUi)
         {
@@ -545,15 +443,13 @@ public sealed partial class MainWindow : Window
             }
 
             RefreshHeader();
-            RefreshTree();
+            if (refreshTree) RefreshTree();
             RefreshStatus();
         }
         finally
         {
             _isUpdatingUi = false;
         }
-
-        StartWatcher();
     }
 
     private void RefreshHeader()
@@ -657,9 +553,7 @@ public sealed partial class MainWindow : Window
         if (BasketsList.SelectedItem is BasketRow row &&
             !string.Equals(_workspace.ActiveTab?.Uid, row.Uid, StringComparison.Ordinal))
         {
-            _selectedNode = null;
             _workspace.ActivateTab(row.Uid);
-            StartWatcher();
         }
     }
 
@@ -879,13 +773,8 @@ public sealed partial class MainWindow : Window
 
     private void RefreshTree()
     {
-        var desiredPath = _selectedNode?.RelativePath;
-        if (string.IsNullOrEmpty(desiredPath))
-        {
-            desiredPath = _workspace.SelectedFolder;
-        }
-
-        var expanded = CollectExpandedPaths();
+        _treeNavigation.Capture(_selectedNode?.Entry, CollectExpandedPaths());
+        var view = _treeNavigation.Restore();
         FileTree.RootNodes.Clear();
 
         var tab = _workspace.ActiveTab;
@@ -909,14 +798,12 @@ public sealed partial class MainWindow : Window
         FillTreeNode(rootNode);
         rootNode.IsExpanded = true;
 
-        foreach (var path in expanded)
+        foreach (var path in view.ExpandedPaths)
         {
             SelectTreePath(rootNode, path, select: false);
         }
 
-        var selected = SelectTreePath(rootNode, desiredPath, select: true) ??
-            SelectTreePath(rootNode, ParentFolder(desiredPath), select: true) ??
-            rootNode;
+        var selected = SelectTreePath(rootNode, view.Path, select: true) ?? rootNode;
 
         FileTree.SelectedNode = selected;
         _selectedNode = selected.Content as EntryNode;
@@ -1044,27 +931,12 @@ public sealed partial class MainWindow : Window
         UpdateSelection();
     }
 
-    private string CurrentFolder => _selectedNode switch
-    {
-        null => string.Empty,
-        { IsFolder: true } folder => folder.RelativePath,
-        _ => ParentFolder(_selectedNode.RelativePath),
-    };
-
-    private static string ParentFolder(string? relativePath)
-    {
-        if (string.IsNullOrEmpty(relativePath))
-        {
-            return string.Empty;
-        }
-
-        return Path.GetDirectoryName(relativePath) ?? string.Empty;
-    }
+    private string CurrentFolder => _treeNavigation.CurrentFolder;
 
     private void UpdateSelection()
     {
+        _treeNavigation.Select(_selectedNode?.Entry);
         var folder = CurrentFolder;
-        _workspace.RememberFolder(folder);
         BasketPathText.Text = _workspace.SelectedFolderPath;
         ToolTipService.SetToolTip(BasketPathText, _workspace.SelectedFolderPath);
         UpButton.IsEnabled = folder.Length > 0;
@@ -1088,24 +960,7 @@ public sealed partial class MainWindow : Window
 
     private void RefreshBreadcrumb()
     {
-        var tab = _workspace.ActiveTab;
-        if (tab is null)
-        {
-            FolderBreadcrumb.ItemsSource = Array.Empty<FolderCrumb>();
-            return;
-        }
-
-        var crumbs = new List<FolderCrumb> { new(tab.DisplayName, string.Empty) };
-        var current = string.Empty;
-        foreach (var part in CurrentFolder.Split(
-            Path.DirectorySeparatorChar,
-            StringSplitOptions.RemoveEmptyEntries))
-        {
-            current = current.Length == 0 ? part : Path.Combine(current, part);
-            crumbs.Add(new FolderCrumb(part, current));
-        }
-
-        FolderBreadcrumb.ItemsSource = crumbs;
+        FolderBreadcrumb.ItemsSource = _treeNavigation.Breadcrumbs();
     }
 
     private void OnBreadcrumbItemClicked(BreadcrumbBar sender, BreadcrumbBarItemClickedEventArgs args)
@@ -1139,7 +994,7 @@ public sealed partial class MainWindow : Window
         }
 
         _selectedNode = null;
-        SelectTreePath(FileTree.RootNodes[0], ParentFolder(folder), select: true);
+        SelectTreePath(FileTree.RootNodes[0], _treeNavigation.ParentFolder, select: true);
     }
 
     private void OnTreeEntryDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
@@ -1558,34 +1413,7 @@ public sealed partial class MainWindow : Window
 
     private void PasteIntoCurrentFolder()
     {
-        var target = CurrentFolder;
-        if (!_workspace.TryReadClipboard(out var payload))
-        {
-            return;
-        }
-
-        if (payload.Kind == PasteContentKind.Files)
-        {
-            if (_cutPaths is not null && SamePaths(payload.Files, _cutPaths))
-            {
-                _workspace.PasteFiles(payload.Files, target, move: true);
-                _cutPaths = null;
-                _copyPaths = null;
-                return;
-            }
-
-            if (_copyPaths is not null && SamePaths(payload.Files, _copyPaths))
-            {
-                _workspace.PasteFiles(payload.Files, target, move: false);
-                _cutPaths = null;
-                _copyPaths = null;
-                return;
-            }
-        }
-
-        _cutPaths = null;
-        _copyPaths = null;
-        _workspace.AddPayload(payload, target);
+        _workspace.AddFromClipboard(CurrentFolder);
     }
 
     private void OnCopyAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
@@ -1612,43 +1440,7 @@ public sealed partial class MainWindow : Window
 
     private void CopyOrCutNode(EntryNode node, bool move)
     {
-        if (node.IsRoot)
-        {
-            return;
-        }
-
-        var paths = new List<string> { node.FullPath };
-        try
-        {
-            _shell.CopyFilesToClipboard(paths, move);
-            if (move)
-            {
-                _cutPaths = paths;
-                _copyPaths = null;
-                _workspace.ReportStatus($"«{node.Name}» вырезан в буфер обмена.");
-            }
-            else
-            {
-                _copyPaths = paths;
-                _cutPaths = null;
-                _workspace.ReportStatus($"«{node.Name}» скопирован в буфер обмена.");
-            }
-        }
-        catch (Exception ex)
-        {
-            _confirmations.ShowError($"Не удалось скопировать в буфер обмена: {ex.Message}");
-        }
-    }
-
-    private static bool SamePaths(IReadOnlyList<string> left, IReadOnlyList<string> right)
-    {
-        if (left.Count != right.Count)
-        {
-            return false;
-        }
-
-        var set = new HashSet<string>(left, StringComparer.OrdinalIgnoreCase);
-        return right.All(set.Contains);
+        _workspace.CopyEntryToClipboard(node.Entry, move);
     }
 
     private bool IsTextInputFocused()

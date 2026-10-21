@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using PasteHatch.Core;
 
 namespace PasteHatch.Platform;
 
@@ -9,7 +10,7 @@ namespace PasteHatch.Platform;
 /// coalesces bursts with a short timer, ignores last-access events so our own previews cannot
 /// feed the watcher, and stops completely when the window is hidden.
 /// </summary>
-public sealed class FolderWatcher : IDisposable
+public sealed class FolderWatcher : IWorkspaceWatcher
 {
     private const int DebounceMilliseconds = 500;
     private const int BufferSize = 64 * 1024;
@@ -17,7 +18,7 @@ public sealed class FolderWatcher : IDisposable
     private readonly object _gate = new();
     private FileSystemWatcher? _watcher;
     private Timer? _timer;
-    private string? _directory;
+    private long _generation;
     private DateTime _suspendedUntilUtc;
     private int _dirty;
     private bool _disposed;
@@ -40,9 +41,12 @@ public sealed class FolderWatcher : IDisposable
             }
 
             DisposeWatcher();
-            _timer?.Change(Timeout.Infinite, Timeout.Infinite);
+            _timer?.Dispose();
+            _timer = null;
+            _generation++;
             Interlocked.Exchange(ref _dirty, 0);
-            _directory = directory;
+            _suspendedUntilUtc = default;
+            var generation = _generation;
 
             var watcher = new FileSystemWatcher(directory)
             {
@@ -56,11 +60,11 @@ public sealed class FolderWatcher : IDisposable
                     | NotifyFilters.Size,
             };
 
-            watcher.Created += (_, _) => Schedule();
-            watcher.Changed += (_, _) => Schedule();
-            watcher.Deleted += (_, _) => Schedule();
-            watcher.Renamed += (_, _) => Schedule();
-            watcher.Error += (_, _) => OnWatcherError();
+            watcher.Created += (_, _) => Schedule(generation);
+            watcher.Changed += (_, _) => Schedule(generation);
+            watcher.Deleted += (_, _) => Schedule(generation);
+            watcher.Renamed += (_, _) => Schedule(generation);
+            watcher.Error += (_, _) => OnWatcherError(generation);
 
             _watcher = watcher;
             watcher.EnableRaisingEvents = true;
@@ -75,17 +79,20 @@ public sealed class FolderWatcher : IDisposable
             DisposeWatcher();
             _timer?.Dispose();
             _timer = null;
-            _directory = null;
+            _generation++;
+            _suspendedUntilUtc = default;
             Interlocked.Exchange(ref _dirty, 0);
         }
     }
 
-    /// <summary>Ignores events caused by our own paste/move/delete for a short while.</summary>
+    /// <summary>Coalesces own and external changes until the operation has settled.</summary>
     public void SuspendFor(TimeSpan duration)
     {
         lock (_gate)
         {
             _suspendedUntilUtc = DateTime.UtcNow + duration;
+            if (_dirty != 0)
+                _timer?.Change(duration + TimeSpan.FromMilliseconds(DebounceMilliseconds), Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -94,17 +101,18 @@ public sealed class FolderWatcher : IDisposable
         lock (_gate)
         {
             _disposed = true;
+            _generation++;
             DisposeWatcher();
             _timer?.Dispose();
             _timer = null;
         }
     }
 
-    private void Schedule()
+    private void Schedule(long generation)
     {
         lock (_gate)
         {
-            if (_disposed || _watcher is null)
+            if (_disposed || _watcher is null || generation != _generation)
             {
                 return;
             }
@@ -118,7 +126,7 @@ public sealed class FolderWatcher : IDisposable
                 delay += (int)remaining.TotalMilliseconds;
             }
 
-            _timer ??= new Timer(OnTimer, null, Timeout.Infinite, Timeout.Infinite);
+            _timer ??= new Timer(OnTimer, generation, Timeout.Infinite, Timeout.Infinite);
             _timer.Change(delay, Timeout.Infinite);
             Interlocked.Exchange(ref _dirty, 1);
         }
@@ -126,33 +134,23 @@ public sealed class FolderWatcher : IDisposable
 
     private void OnTimer(object? state)
     {
-        if (Interlocked.Exchange(ref _dirty, 0) == 0)
-        {
-            return;
-        }
-
         lock (_gate)
         {
-            if (_disposed || _watcher is null)
-            {
+            if (_disposed || _watcher is null || state is not long generation || generation != _generation ||
+                Interlocked.Exchange(ref _dirty, 0) == 0)
                 return;
-            }
+            // Keep generation validation and publication atomic with Stop/Watch.
+            Changed?.Invoke(this, EventArgs.Empty);
         }
-
-        Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private void OnWatcherError()
+    private void OnWatcherError(long generation)
     {
         lock (_gate)
         {
-            if (_disposed || _watcher is null)
-            {
-                return;
-            }
+            if (_disposed || _watcher is null || generation != _generation) return;
+            Error?.Invoke(this, EventArgs.Empty);
         }
-
-        Error?.Invoke(this, EventArgs.Empty);
     }
 
     private void DisposeWatcher()

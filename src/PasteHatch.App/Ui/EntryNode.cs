@@ -131,9 +131,3 @@ public sealed class EntryNode : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
-
-/// <summary>One breadcrumb segment: a label and the folder it opens.</summary>
-public sealed record FolderCrumb(string Label, string RelativePath)
-{
-    public override string ToString() => Label;
-}
