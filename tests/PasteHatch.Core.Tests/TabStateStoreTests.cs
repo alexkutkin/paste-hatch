@@ -28,7 +28,7 @@ public sealed class TabStateStoreTests : IDisposable
             ActiveUid = "EF4GH5",
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "Первая корзина" },
+                new TabState { Uid = "AB2CD3", Name = "Первая корзина", SelectedFolder = "docs" },
                 new TabState { Uid = "EF4GH5", Name = "Вторая корзина" },
             ],
             Window = new WindowPlacementState { Left = 120, Top = 80, Width = 900, Height = 700 },
@@ -43,6 +43,7 @@ public sealed class TabStateStoreTests : IDisposable
             {
                 Assert.Equal("AB2CD3", tab.Uid);
                 Assert.Equal("Первая корзина", tab.Name);
+                Assert.Equal("docs", tab.SelectedFolder);
             },
             tab =>
             {
@@ -105,6 +106,43 @@ public sealed class TabStateStoreTests : IDisposable
 
         Assert.Empty(state.Tabs);
         Assert.Null(state.ActiveUid);
+    }
+
+    [Fact]
+    public void Load_Version2StateWithMaterialOrder_StillLoadsTabs()
+    {
+        File.WriteAllText(_temp.StateFile, """
+            {
+              "version": 2,
+              "activeUid": "AB2CD3",
+              "tabs": [
+                { "uid": "AB2CD3", "name": "Корзина", "materialOrder": ["a.txt", "b.txt"] }
+              ]
+            }
+            """);
+
+        var state = CreateStore().Load();
+
+        var tab = Assert.Single(state.Tabs);
+        Assert.Equal("AB2CD3", tab.Uid);
+        Assert.Equal(string.Empty, tab.SelectedFolder);
+        Assert.Equal(["a.txt", "b.txt"], tab.MaterialOrder);
+    }
+
+    [Fact]
+    public void Save_DoesNotWriteTheLegacyMaterialOrder()
+    {
+        var store = CreateStore();
+        store.Save(new WorkspaceState
+        {
+            Tabs = [new TabState { Uid = "AB2CD3", Name = "Корзина", SelectedFolder = "docs" }],
+        });
+
+        var json = File.ReadAllText(store.StateFilePath);
+
+        Assert.DoesNotContain("materialOrder", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("selectedFolder", json);
+        Assert.Equal(3, store.Load().Version);
     }
 
     [Fact]

@@ -140,6 +140,31 @@ public sealed class MaterialPreviewTests : IDisposable
     }
 
     [Fact]
+    public void ReadText_ReturnsBoundedStartOfTheFileAndStripsBom()
+    {
+        var path = Path.Combine(_temp.SourceRoot, "full.md");
+        File.WriteAllText(path, "# Заголовок\r\nвторая строка", new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        var text = MaterialPreview.ReadText(path, 11);
+
+        Assert.Equal("# Заголовок", text);
+        Assert.DoesNotContain("\uFEFF", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadText_ForFileOpenInAnotherApp_StillReads()
+    {
+        var path = _temp.CreateSourceFile("shared-full.txt", "первая строка");
+        using var holder = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete);
+
+        Assert.Equal("первая строка", MaterialPreview.ReadText(path, 100));
+    }
+
+    [Fact]
     public void Read_WhenFileIsOpenInAnotherApp_StillReturnsPreview()
     {
         var path = _temp.CreateSourceFile("shared.txt", "Открыт в другом приложении\r\nвторая строка");

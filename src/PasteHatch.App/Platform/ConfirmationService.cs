@@ -40,6 +40,13 @@ public sealed class ConfirmationService : IConfirmationService
     }
 
     /// <inheritdoc />
+    public bool ConfirmRecycleFolder(string displayName)
+    {
+        var text = $"Папка «{displayName}» и всё её содержимое будут отправлены в Корзину Windows.";
+        return ConfirmRecycle(heading: "Удалить папку?", text: text, pathToReveal: null);
+    }
+
+    /// <inheritdoc />
     public void ShowError(string message)
     {
         ArgumentNullException.ThrowIfNull(message);

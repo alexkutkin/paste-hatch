@@ -27,6 +27,16 @@ public sealed class MaterialNamingTests : IDisposable
     }
 
     [Fact]
+    public void UniqueFileName_WhenFolderHasTheSameName_AppendsNumberedSuffix()
+    {
+        Directory.CreateDirectory(Path.Combine(_temp.Root, "report.txt"));
+
+        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt");
+
+        Assert.Equal("report (2).txt", fileName);
+    }
+
+    [Fact]
     public void UniqueFileName_WhenNameAndSuffixTwoExist_ContinuesNumbering()
     {
         File.WriteAllText(Path.Combine(_temp.Root, "report.txt"), string.Empty);

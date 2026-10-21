@@ -13,6 +13,9 @@ public interface IConfirmationService
     /// <summary>Asks whether a single material file may be sent to the Recycle Bin.</summary>
     bool ConfirmRecycleMaterial(string displayName);
 
+    /// <summary>Asks whether a subfolder and everything inside it may be sent to the Recycle Bin.</summary>
+    bool ConfirmRecycleFolder(string displayName);
+
     /// <summary>Shows a modal error dialog for a failed operation the user should know about.</summary>
     void ShowError(string message);
 }

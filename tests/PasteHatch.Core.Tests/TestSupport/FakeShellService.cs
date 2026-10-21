@@ -16,6 +16,10 @@ internal sealed class FakeShellService : IShellService
 
     public List<string> CopiedTexts { get; } = [];
 
+    public List<string> CopiedFilePathSets { get; } = [];
+
+    public List<bool> CopiedFileMoves { get; } = [];
+
     public Exception? OpenItemFailure { get; set; }
 
     public Exception? OpenFolderFailure { get; set; }
@@ -82,5 +86,16 @@ internal sealed class FakeShellService : IShellService
         }
 
         CopiedTexts.Add(text);
+    }
+
+    public void CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)
+    {
+        if (CopyTextFailure is not null)
+        {
+            throw CopyTextFailure;
+        }
+
+        CopiedFilePathSets.Add(string.Join('\u001f', paths));
+        CopiedFileMoves.Add(move);
     }
 }

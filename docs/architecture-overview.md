@@ -6,8 +6,8 @@
 - **Платформа:** C#/.NET 9, WinUI 3 + Windows App SDK 2.5.1 (self-contained, без установки
   рантайма Windows App SDK), Windows 10 1809+ / Windows 11.
 - **Хранилище:** папки корзин и JSON-файл состояния в `%LOCALAPPDATA%\PasteHatch`; файловая
-  система — источник истины, `state.json` хранит порядок вкладок, их названия, активную вкладку,
-  сохранённый порядок материалов в каждой корзине и геометрию окна.
+  система — источник истины, `state.json` хранит порядок корзин, их названия, активную корзину,
+  выбранную папку каждой корзины и геометрию окна.
 
 ## Контекст системы
 
@@ -26,7 +26,7 @@ flowchart LR
     app -->|показывает содержимое и путь| user
     app <-->|clipboard · shell · tray · recycle bin · dialogs| windows
     app <-->|читает и сохраняет файлы| baskets
-    app <-->|восстанавливает вкладки и окно| state
+    app <-->|восстанавливает корзины и окно| state
     agent -->|читает переданную пользователем папку| baskets
 ```
 
@@ -39,9 +39,9 @@ flowchart LR
     agent[Локальный AI-агент]
 
     subgraph pastehatch[PasteHatch · C#/.NET]
-        ui[PasteHatch.App<br/>WinUI 3 · окно · вкладки · список · заметка]
-        core[PasteHatch.Core<br/>корзины · материалы · именование · state.json<br/>восстановление · классификация]
-        platform[PasteHatch.App/Platform<br/>буфер · трей · Корзина Windows · TaskDialog<br/>single instance · Win32-хелперы]
+        ui[PasteHatch.App<br/>WinUI 3 · окно · рейка корзин · дерево файлов<br/>breadcrumb · предпросмотр]
+        core[PasteHatch.Core<br/>корзины · дерево файлов · материалы · именование<br/>state.json · восстановление · классификация]
+        platform[PasteHatch.App/Platform<br/>буфер · трей · Корзина Windows · TaskDialog<br/>FileSystemWatcher · single instance · Win32]
     end
 
     baskets[(Файлы корзин<br/>%LOCALAPPDATA%\PasteHatch\Baskets)]
@@ -58,16 +58,17 @@ flowchart LR
 
 Границы ответственности:
 
-- **PasteHatch.Core** не знает про WinUI: доменные правила (лимит 10 корзин, «последняя вкладка не
-  закрывается», коллизии имён, классификация типов, UID, восстановление) и контракты
-  `IClipboardReader` / `IShellService` / `IConfirmationService` / `ITabStateStore`. Покрыт
-  xUnit-тестами.
+- **PasteHatch.Core** не знает про WinUI: доменные правила (лимит 10 корзин, «последняя корзина не
+  закрывается», сортировка и обход дерева, коллизии имён, классификация типов, UID, восстановление)
+  и контракты `IClipboardReader` / `IShellService` / `IConfirmationService` / `ITabStateStore`.
+  Покрыт xUnit-тестами.
 - **PasteHatch.App/Platform** реализует эти контракты нативными средствами Windows (WinForms
   `TaskDialog`/`NotifyIcon`/`Clipboard`, `Microsoft.VisualBasic.FileIO` для Корзины, Win32
   `SetWindowPos`/монитор/pin, `Mutex`+событие для единственного экземпляра).
-- **PasteHatch.App** — представление: стандартные контролы WinUI 3 (`TabView`, `CommandBar`,
-  `ListView`, `TextBox`, `InfoBar`, `MenuFlyout`) и стандартный заголовок окна; системная
-  светлая/тёмная тема; отдельное окно настроек на `ToggleSwitch`; приложение стартует в трее и
-  подписывается на `BasketWorkspace.Changed`, чтобы перерисовывать состояние.
+- **PasteHatch.App** — представление: стандартные контролы WinUI 3 (`ListView`-рейка, `CommandBar`,
+  `TreeView`, `BreadcrumbBar`, `TextBox`, `Image`, `InfoBar`, `MenuFlyout`) и стандартный заголовок
+  окна; системная светлая/тёмная тема; отдельное окно настроек на `ToggleSwitch`. Layout — три
+  колонки: рейка корзин, дерево файлов, предпросмотр. Пока окно видимо, `FolderWatcher` слушает
+  изменения активной корзины.
 
 Схемы разделяют внешний контекст и внутренние обязанности приложения, как рекомендует C4 для обзорного уровня; дополнительные уровни добавляются, когда они помогают ответить на конкретный вопрос об архитектуре. См. [C4: виды диаграмм](https://c4model.com/diagrams).

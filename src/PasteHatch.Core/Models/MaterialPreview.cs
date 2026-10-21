@@ -3,9 +3,8 @@ using System.Text;
 namespace PasteHatch.Core;
 
 /// <summary>
-/// Builds the short text excerpt shown under a material's name in the basket list. Basket file
-/// names are often time-based, so the first lines of the file are what tells the user what it
-/// contains. Only plain text and Markdown are previewed; every other material keeps its type label.
+/// Text helpers for basket materials: a short first-lines excerpt and the bounded text used by the
+/// preview pane. Only plain text and Markdown are previewed; other materials keep their type label.
 /// </summary>
 public static class MaterialPreview
 {
@@ -76,6 +75,33 @@ public static class MaterialPreview
         }
 
         return BuildExcerpt(sample);
+    }
+
+    /// <summary>
+    /// Reads the beginning of a text file for the preview pane. The bounded read keeps a large
+    /// file from blocking the UI; the caller can append an ellipsis when the cap was reached.
+    /// </summary>
+    public static string ReadText(string fullPath, int maxCharacters)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fullPath);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCharacters);
+
+        using var stream = new FileStream(
+            fullPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+
+        // Encoding.UTF8 uses replacement fallback, so invalid bytes never throw; the BOM is
+        // detected and stripped so it cannot leak into the preview.
+        using var reader = new StreamReader(
+            stream,
+            Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: true);
+
+        var buffer = new char[maxCharacters];
+        var read = reader.ReadBlock(buffer, 0, buffer.Length);
+        return new string(buffer, 0, read);
     }
 
     private static string? BuildExcerpt(string sample)

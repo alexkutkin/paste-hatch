@@ -251,7 +251,7 @@ public sealed class BasketWorkspaceMaterialTests : IDisposable
         workspace.CopyActiveBasketPath();
 
         Assert.Equal(new[] { directory }, _harness.Shell.CopiedTexts);
-        Assert.Equal("Путь к папке корзины скопирован в буфер обмена.", workspace.StatusMessage);
+        Assert.Equal("Путь к папке скопирован в буфер обмена.", workspace.StatusMessage);
     }
 
     [Fact]

@@ -5,6 +5,8 @@ public static class RussianPlural
 {
     public static string Files(int count) => $"{count} {Noun(count, "файл", "файла", "файлов")}";
 
+    public static string Items(int count) => $"{count} {Noun(count, "элемент", "элемента", "элементов")}";
+
     public static string Baskets(int count) => $"{count} {Noun(count, "корзина", "корзины", "корзин")}";
 
     public static string Noun(int count, string one, string few, string many)

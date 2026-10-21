@@ -6,9 +6,13 @@ internal sealed class FakeConfirmationService : IConfirmationService
 
     public bool ConfirmMaterialResult { get; set; } = true;
 
+    public bool ConfirmFolderResult { get; set; } = true;
+
     public List<(string DisplayName, string DirectoryPath)> BasketConfirmations { get; } = [];
 
     public List<string> MaterialConfirmations { get; } = [];
+
+    public List<string> FolderConfirmations { get; } = [];
 
     public List<string> Errors { get; } = [];
 
@@ -22,6 +26,12 @@ internal sealed class FakeConfirmationService : IConfirmationService
     {
         MaterialConfirmations.Add(displayName);
         return ConfirmMaterialResult;
+    }
+
+    public bool ConfirmRecycleFolder(string displayName)
+    {
+        FolderConfirmations.Add(displayName);
+        return ConfirmFolderResult;
     }
 
     public void ShowError(string message) => Errors.Add(message);

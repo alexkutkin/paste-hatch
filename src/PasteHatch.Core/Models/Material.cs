@@ -12,6 +12,13 @@ public enum MaterialKind
 /// <summary>One file stored inside a basket folder. The file on disk is the source of truth.</summary>
 public sealed record Material(string FileName, string FullPath, MaterialKind Kind)
 {
+    /// <summary>Path relative to the basket root, so files in subfolders identify themselves.</summary>
+    public string RelativePath { get; init; } = FileName;
+
+    public long Size { get; init; }
+
+    public DateTimeOffset Modified { get; init; }
+
     public string TypeLabel => MaterialKindLabels.For(Kind);
 }
 

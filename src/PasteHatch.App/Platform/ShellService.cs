@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -70,6 +72,36 @@ public sealed class ShellService : IShellService
             catch (ExternalException) when (attempt < ClipboardRetryAttempts - 1)
             {
                 // Another application owns the clipboard for a moment; retry, then surface the error.
+                Thread.Sleep(ClipboardRetryDelayMilliseconds);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        var data = new DataObject();
+        data.SetData(DataFormats.FileDrop, paths.ToArray());
+
+        // Preferred DropEffect is what Explorer reads to decide between copy and cut.
+        var effect = new MemoryStream(BitConverter.GetBytes(move ? 2u : 1u));
+        data.SetData("Preferred DropEffect", effect);
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                Clipboard.SetDataObject(data, copy: true);
+                return;
+            }
+            catch (ExternalException) when (attempt < ClipboardRetryAttempts - 1)
+            {
                 Thread.Sleep(ClipboardRetryDelayMilliseconds);
             }
         }

@@ -24,7 +24,8 @@ public static class MaterialNaming
         var candidate = desiredFileName;
         var counter = 2;
 
-        while (File.Exists(Path.Combine(directory, candidate)))
+        while (File.Exists(Path.Combine(directory, candidate)) ||
+               Directory.Exists(Path.Combine(directory, candidate)))
         {
             candidate = $"{baseName} ({counter}){extension}";
             counter++;
@@ -86,12 +87,20 @@ public static class MaterialNaming
     /// Returns the trimmed value or null with a human-readable Russian error.
     /// </summary>
     public static string? ValidateRenameBase(string? input, string extension, out string? error)
+        => ValidateName(input, extension, isFolder: false, out error);
+
+    /// <summary>Validates a folder name with folder-specific error messages.</summary>
+    public static string? ValidateFolderName(string? input, out string? error)
+        => ValidateName(input, string.Empty, isFolder: true, out error);
+
+    private static string? ValidateName(string? input, string extension, bool isFolder, out string? error)
     {
         error = null;
+        var subject = isFolder ? "папки" : "файла";
 
         if (string.IsNullOrWhiteSpace(input))
         {
-            error = "Имя файла не может быть пустым.";
+            error = $"Имя {subject} не может быть пустым.";
             return null;
         }
 
@@ -99,7 +108,7 @@ public static class MaterialNaming
         // silently instead of telling the user why the name is not accepted.
         if (input.EndsWith(' ') || input.EndsWith('.'))
         {
-            error = "Имя файла не может заканчиваться точкой или пробелом.";
+            error = $"Имя {subject} не может заканчиваться точкой или пробелом.";
             return null;
         }
 
@@ -107,20 +116,20 @@ public static class MaterialNaming
 
         if (trimmed.Length > MaxBaseNameLength)
         {
-            error = $"Имя файла не должно превышать {MaxBaseNameLength} символов.";
+            error = $"Имя {subject} не должно превышать {MaxBaseNameLength} символов.";
             return null;
         }
 
         var invalid = Path.GetInvalidFileNameChars();
         if (trimmed.IndexOfAny(invalid) >= 0)
         {
-            error = "Имя файла содержит недопустимые символы: \\ / : * ? \" < > |.";
+            error = $"Имя {subject} содержит недопустимые символы: \\ / : * ? \" < > |.";
             return null;
         }
 
         if (trimmed.EndsWith('.'))
         {
-            error = "Имя файла не может заканчиваться точкой.";
+            error = $"Имя {subject} не может заканчиваться точкой.";
             return null;
         }
 
@@ -133,7 +142,7 @@ public static class MaterialNaming
         var fullLength = trimmed.Length + extension.Length;
         if (fullLength > 255)
         {
-            error = "Слишком длинное имя файла.";
+            error = $"Слишком длинное имя {subject}.";
             return null;
         }
 

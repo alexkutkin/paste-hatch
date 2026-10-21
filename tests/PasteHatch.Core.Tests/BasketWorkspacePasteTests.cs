@@ -262,19 +262,37 @@ public sealed class BasketWorkspacePasteTests : IDisposable
     }
 
     [Fact]
-    public void AddFiles_ForDirectoryPath_ReportsProblemAndAddsNothing()
+    public void AddFiles_ForDirectoryPath_CopiesFolderWithItsContents()
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var directoryPath = _harness.Temp.CreateSourceDirectory("dropped-folder");
+        _harness.Temp.CreateSourceFile(Path.Combine("dropped-folder", "nested", "note.txt"), "внутри");
 
         var added = workspace.AddFiles([directoryPath]);
 
+        Assert.Equal(1, added);
+        var basketDirectory = workspace.RequireActiveTab().DirectoryPath;
+        FileAssert.HasUtf8TextWithoutBom(
+            Path.Combine(basketDirectory, "dropped-folder", "nested", "note.txt"),
+            "внутри");
+        Assert.Single(workspace.Entries, entry => entry.IsFolder && entry.Name == "dropped-folder");
+        Assert.Empty(_harness.Confirmations.Errors);
+        Assert.Contains("Добавлено", workspace.StatusMessage);
+    }
+
+    [Fact]
+    public void AddFiles_ForFolderAlreadyInsideBasket_IsSkipped()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var source = _harness.Temp.CreateSourceDirectory("source");
+        _harness.Temp.CreateSourceFile(Path.Combine("source", "file.txt"), "x");
+        Assert.Equal(1, workspace.AddFiles([source]));
+        var copiedFolder = Path.Combine(workspace.RequireActiveTab().DirectoryPath, "source");
+
+        var added = workspace.AddFiles([copiedFolder]);
+
         Assert.Equal(0, added);
-        Assert.Empty(workspace.Materials);
-        var error = Assert.Single(_harness.Confirmations.Errors);
-        Assert.Contains("папка", error);
-        Assert.Contains("dropped-folder", error);
-        Assert.Contains("папка", workspace.StatusMessage);
+        Assert.Contains("уже", workspace.StatusMessage);
     }
 
     [Fact]

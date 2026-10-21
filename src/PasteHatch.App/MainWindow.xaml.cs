@@ -1,5 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
@@ -8,6 +13,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using PasteHatch.Core;
 using PasteHatch.Platform;
 using PasteHatch.Ui;
@@ -22,14 +28,20 @@ using Windows.UI.Core;
 namespace PasteHatch;
 
 /// <summary>
-/// The single compact window. It uses standard WinUI controls only (TabView, CommandBar,
-/// ListView, TextBox, InfoBar, MenuFlyout) and the standard Windows title bar, keeps all
-/// behaviour in <see cref="BasketWorkspace"/>, and hides to the notification area on close.
+/// Three-column workspace: a vertical basket rail, one file tree and a preview pane. All
+/// behaviour stays in <see cref="BasketWorkspace"/>; the window only uses default Fluent controls
+/// and hides to the notification area on close.
 /// </summary>
 public sealed partial class MainWindow : Window
 {
-    private const int DefaultWidthDip = 820;
-    private const int DefaultHeightDip = 680;
+    private const int DefaultWidthDip = 1200;
+    private const int DefaultHeightDip = 800;
+    private const double RailWidth = 220;
+    private const double PreviewWidth = 320;
+    private const double SplitterWidth = 8;
+    private const int MaxTextPreviewCharacters = 64 * 1024;
+
+    private static readonly CultureInfo UiCulture = CultureInfo.GetCultureInfo("ru-RU");
 
     private readonly ConfirmationService _confirmations;
     private readonly ShellService _shell;
@@ -37,24 +49,30 @@ public sealed partial class MainWindow : Window
     private readonly SettingsStore _settingsStore;
     private readonly AppWindow _appWindow;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _placementTimer;
-    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _statusTimer;
+    private readonly FolderWatcher _folderWatcher = new();
+    private readonly ObservableCollection<BasketRow> _basketRows = new();
+    private readonly List<string> _internalDragPaths = [];
 
     private AppSettings _settings;
     private TrayIcon? _tray;
     private SettingsWindow? _settingsWindow;
-    private MaterialRow? _selectedRow;
-    private readonly System.Collections.ObjectModel.ObservableCollection<MaterialRow> _materialRows = new();
-    private string? _tabsSignature;
-    private string? _editingTabUid;
-    private string? _editingTabOriginalName;
-    private string? _hiddenStatus;
+    private EntryNode? _selectedNode;
+    private List<string>? _copyPaths;
+    private List<string>? _cutPaths;
+    private string? _basketSignature;
+    private string? _editingBasketUid;
+    private string? _watchedUid;
     private string? _startupError;
     private bool _startupErrorReported;
+    private bool _watcherRunning;
     private bool _refreshScheduled;
-    private bool _tabOrderSyncScheduled;
+    private bool _refreshingFromWatcher;
+    private bool _isBasketDrag;
     private bool _isUpdatingUi;
     private bool _isExiting;
-    private bool _internalReorderDrag;
+    private double _railWidth = RailWidth;
+    private double _previewWidth = PreviewWidth;
+    private int _previewSequence;
     private readonly bool _testOffscreen;
     private readonly bool _testNoTray;
     private IntPtr _windowHandle = IntPtr.Zero;
@@ -62,11 +80,8 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        MaterialsList.ItemsSource = _materialRows;
-        BasketsTabView.TabItemsChanged += OnTabItemsChanged;
+        BasketsList.ItemsSource = _basketRows;
 
-        // UI smoke-test isolation: run the window off-screen, without activation and optionally
-        // without a tray icon, so automated checks never flash windows or steal focus.
         _testOffscreen = string.Equals(
             Environment.GetEnvironmentVariable("PASTEHATCH_TEST_OFFSCREEN"), "1", StringComparison.Ordinal);
         _testNoTray = string.Equals(
@@ -88,17 +103,15 @@ public sealed partial class MainWindow : Window
             _confirmations);
         _workspace.Changed += OnWorkspaceChanged;
 
+        _folderWatcher.Changed += OnFolderWatcherChanged;
+        _folderWatcher.Error += OnFolderWatcherError;
+
         ConfigureWindowShell();
 
         _placementTimer = DispatcherQueue.CreateTimer();
         _placementTimer.Interval = TimeSpan.FromMilliseconds(700);
         _placementTimer.IsRepeating = false;
         _placementTimer.Tick += (_, _) => PersistWindowPlacement();
-
-        _statusTimer = DispatcherQueue.CreateTimer();
-        _statusTimer.Interval = TimeSpan.FromSeconds(6);
-        _statusTimer.IsRepeating = false;
-        _statusTimer.Tick += (_, _) => HideStatusBar();
 
         RootGrid.Loaded += OnRootLoaded;
         RootGrid.ActualThemeChanged += (_, _) => ApplyTheme();
@@ -119,10 +132,6 @@ public sealed partial class MainWindow : Window
             : new TrayIcon(ToggleWindowVisibility, ShowFromTray, OpenSettings, ExitApplication);
     }
 
-    /// <summary>
-    /// Called once by <see cref="App"/> after the window is created. The app normally starts
-    /// hidden in the notification area; the very first launch and <c>--show</c> open the window.
-    /// </summary>
     public void InitializeAtStartup(bool forceShow)
     {
         ConfigureWindowPlacement();
@@ -149,7 +158,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Places the test window outside every monitor and removes it from taskbar/Alt+Tab.</summary>
     private void MoveOffscreenForTests()
     {
         try
@@ -165,7 +173,6 @@ public sealed partial class MainWindow : Window
 
     // ---- Public window operations ------------------------------------------------------
 
-    /// <summary>Shows and activates the window (tray click, second launch, "Показать окно").</summary>
     public void ShowFromTray()
     {
         if (_isExiting)
@@ -175,9 +182,9 @@ public sealed partial class MainWindow : Window
 
         if (_testOffscreen)
         {
-            // Load the XAML tree for UI Automation without activating or flashing a window.
             NativeWindow.ShowWithoutActivation(GetWindowHandle());
             _workspace.Refresh();
+            StartWatcher();
             return;
         }
 
@@ -190,6 +197,7 @@ public sealed partial class MainWindow : Window
         Activate();
         NativeWindow.BringToForeground(GetWindowHandle());
         _workspace.Refresh();
+        StartWatcher();
     }
 
     public void ReportUnexpectedError(Exception exception)
@@ -208,8 +216,6 @@ public sealed partial class MainWindow : Window
     {
         var handle = GetWindowHandle();
 
-        // A minimized window is still "visible" to Win32, but the user cannot see it. Treat it as
-        // hidden so a tray click restores it instead of silently hiding it behind the taskbar.
         if (NativeWindow.IsVisible(handle) && !NativeWindow.IsMinimized(handle))
         {
             HideToTray();
@@ -222,6 +228,8 @@ public sealed partial class MainWindow : Window
 
     private void HideToTray()
     {
+        StopWatcher();
+        _workspace.SaveState();
         PersistWindowPlacement();
         _appWindow.Hide();
     }
@@ -233,11 +241,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // Persist before flipping the exit flag: PersistWindowPlacement ignores saves while exiting.
+        StopWatcher();
+        _workspace.SaveState();
         PersistWindowPlacement();
         _isExiting = true;
         _placementTimer.Stop();
-        _statusTimer.Stop();
 
         if (_settingsWindow is not null)
         {
@@ -251,6 +259,7 @@ public sealed partial class MainWindow : Window
             _tray = null;
         }
 
+        _folderWatcher.Dispose();
         Application.Current.Exit();
     }
 
@@ -260,8 +269,8 @@ public sealed partial class MainWindow : Window
     {
         if (_appWindow.Presenter is OverlappedPresenter presenter)
         {
-            presenter.PreferredMinimumWidth = 640;
-            presenter.PreferredMinimumHeight = 440;
+            presenter.PreferredMinimumWidth = 720;
+            presenter.PreferredMinimumHeight = 480;
             presenter.IsResizable = true;
             presenter.IsMaximizable = true;
         }
@@ -346,11 +355,12 @@ public sealed partial class MainWindow : Window
         ApplyTheme();
         RefreshAll();
         UpdateAddButtonState();
+        StartWatcher();
 
         if (_startupError is not null && !_startupErrorReported)
         {
             _startupErrorReported = true;
-            ShowStatus(_startupError, InfoBarSeverity.Error);
+            ShowError(_startupError);
         }
     }
 
@@ -388,6 +398,18 @@ public sealed partial class MainWindow : Window
         _placementTimer.Start();
     }
 
+    private void OnRailSplitterDragDelta(object sender, DragDeltaEventArgs e)
+    {
+        _railWidth = Math.Clamp(_railWidth + e.HorizontalChange, 160, 360);
+        RailColumn.Width = new GridLength(_railWidth);
+    }
+
+    private void OnPreviewSplitterDragDelta(object sender, DragDeltaEventArgs e)
+    {
+        _previewWidth = Math.Clamp(_previewWidth - e.HorizontalChange, 240, 520);
+        PreviewColumn.Width = new GridLength(_previewWidth);
+    }
+
     // ---- Settings ----------------------------------------------------------------------
 
     private void OnSettingsClick(object sender, RoutedEventArgs e) => OpenSettings();
@@ -411,10 +433,89 @@ public sealed partial class MainWindow : Window
         NativeWindow.SetAlwaysOnTop(GetWindowHandle(), settings.AlwaysOnTop);
     }
 
+    // ---- File watcher ------------------------------------------------------------------
+
+    private void StartWatcher()
+    {
+        var tab = _workspace.ActiveTab;
+        if (tab is null)
+        {
+            StopWatcher();
+            return;
+        }
+
+        if (_watcherRunning && string.Equals(_watchedUid, tab.Uid, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            _folderWatcher.Watch(tab.DirectoryPath);
+            _watchedUid = tab.Uid;
+            _watcherRunning = true;
+        }
+        catch (Exception ex)
+        {
+            _watcherRunning = false;
+            _watchedUid = null;
+            _workspace.ReportStatus($"Не удалось включить наблюдение за папкой: {ex.Message}");
+        }
+    }
+
+    private void StopWatcher()
+    {
+        _folderWatcher.Stop();
+        _watcherRunning = false;
+        _watchedUid = null;
+    }
+
+    private void OnFolderWatcherChanged(object? sender, EventArgs e)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!_isExiting)
+            {
+                _refreshingFromWatcher = true;
+                try
+                {
+                    _workspace.Refresh();
+                }
+                finally
+                {
+                    _refreshingFromWatcher = false;
+                }
+            }
+        });
+    }
+
+    private void OnFolderWatcherError(object? sender, EventArgs e)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_isExiting)
+            {
+                return;
+            }
+
+            // Buffer overflow or a directory replaced on disk: rebuild the watcher and rescan once.
+            _watcherRunning = false;
+            _watchedUid = null;
+            StartWatcher();
+            _workspace.Refresh();
+        });
+    }
+
     // ---- Workspace change handling -----------------------------------------------------
 
     private void OnWorkspaceChanged(object? sender, EventArgs e)
     {
+        // Internal paste/move/delete: do not refresh again when our own watcher event arrives.
+        if (!_refreshingFromWatcher)
+        {
+            _folderWatcher.SuspendFor(TimeSpan.FromSeconds(1));
+        }
+
         if (_refreshScheduled)
         {
             return;
@@ -438,482 +539,152 @@ public sealed partial class MainWindow : Window
         _isUpdatingUi = true;
         try
         {
-            if (_editingTabUid is null)
+            if (_editingBasketUid is null)
             {
-                RefreshTabs();
+                RefreshBaskets();
             }
 
             RefreshHeader();
-            RefreshMaterials();
+            RefreshTree();
             RefreshStatus();
         }
         finally
         {
             _isUpdatingUi = false;
         }
-    }
 
-    private void RefreshTabs()
-    {
-        // Rebuilding TabViewItems re-creates their XAML containers, so it only happens when the
-        // tab strip really changed; material updates just re-sync the active selection.
-        var signature = string.Join(
-            '\u001f',
-            _workspace.Tabs.Select(tab => tab.Uid + '\u001e' + tab.DisplayName)) + '\u001f' + _workspace.CanCloseTab;
-
-        if (string.Equals(signature, _tabsSignature, StringComparison.Ordinal))
-        {
-            SelectActiveTabItem();
-            return;
-        }
-
-        _tabsSignature = signature;
-        var activeUid = _workspace.ActiveTab?.Uid;
-        BasketsTabView.TabItems.Clear();
-
-        TabViewItem? activeItem = null;
-        foreach (var tab in _workspace.Tabs)
-        {
-            var item = new TabViewItem
-            {
-                Header = tab.DisplayName,
-                Tag = tab.Uid,
-                IsClosable = _workspace.CanCloseTab,
-            };
-            item.DoubleTapped += OnTabDoubleTapped;
-            BasketsTabView.TabItems.Add(item);
-
-            if (string.Equals(tab.Uid, activeUid, StringComparison.Ordinal))
-            {
-                activeItem = item;
-            }
-        }
-
-        if (activeItem is not null)
-        {
-            BasketsTabView.SelectedItem = activeItem;
-        }
-
-        DispatcherQueue.TryEnqueue(UpdateAddButtonState);
-    }
-
-    private void SelectActiveTabItem()
-    {
-        var activeUid = _workspace.ActiveTab?.Uid;
-        var activeItem = BasketsTabView.TabItems
-            .OfType<TabViewItem>()
-            .FirstOrDefault(item => string.Equals(item.Tag as string, activeUid, StringComparison.Ordinal));
-
-        if (activeItem is not null && !ReferenceEquals(BasketsTabView.SelectedItem, activeItem))
-        {
-            BasketsTabView.SelectedItem = activeItem;
-        }
-    }
-
-    private void UpdateAddButtonState()
-    {
-        var addButton = FindDescendant<Button>(BasketsTabView, "AddButton");
-        if (addButton is null)
-        {
-            return;
-        }
-
-        addButton.IsEnabled = _workspace.CanCreateTab;
-        ToolTipService.SetToolTip(
-            addButton,
-            _workspace.CanCreateTab ? "Создать корзину" : "Достигнут предел в 10 корзин");
+        StartWatcher();
     }
 
     private void RefreshHeader()
     {
         var tab = _workspace.ActiveTab;
-        BasketPathText.Text = tab?.DirectoryPath ?? string.Empty;
-        ToolTipService.SetToolTip(BasketPathText, tab?.DirectoryPath ?? string.Empty);
+        BasketPathText.Text = tab is null ? string.Empty : _workspace.SelectedFolderPath;
+        ToolTipService.SetToolTip(BasketPathText, _workspace.SelectedFolderPath);
         Title = tab is null ? "PasteHatch" : $"{tab.DisplayName} — PasteHatch";
 
         var hasTab = tab is not null;
         PasteButton.IsEnabled = hasTab;
+        NewFolderButton.IsEnabled = hasTab;
+        RefreshButton.IsEnabled = hasTab;
         OpenFolderButton.IsEnabled = hasTab;
         CopyPathButton.IsEnabled = hasTab;
-    }
-
-    private void RefreshMaterials()
-    {
-        var selectedFileName = _selectedRow?.FileName;
-        SyncMaterialRows(_workspace.Materials);
-
-        _selectedRow = null;
-        if (selectedFileName is not null)
-        {
-            var match = _materialRows.FirstOrDefault(row =>
-                string.Equals(row.FileName, selectedFileName, StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
-            {
-                MaterialsList.SelectedItem = match;
-                _selectedRow = match;
-            }
-        }
-
-        EmptyStatePanel.Visibility = _materialRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        FileCountText.Text = RussianPlural.Files(_materialRows.Count);
-    }
-
-    /// <summary>
-    /// Brings the bound rows in line with the workspace one item at a time instead of replacing
-    /// the whole ItemsSource on every paste; this keeps ListView containers stable and avoids
-    /// allocation churn when materials are added frequently.
-    /// </summary>
-    private void SyncMaterialRows(System.Collections.Generic.IReadOnlyList<Material> materials)
-    {
-        for (var index = 0; index < materials.Count; index++)
-        {
-            var material = materials[index];
-            if (index < _materialRows.Count &&
-                string.Equals(_materialRows[index].FileName, material.FileName, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var existingIndex = -1;
-            for (var search = index + 1; search < _materialRows.Count; search++)
-            {
-                if (string.Equals(_materialRows[search].FileName, material.FileName, StringComparison.Ordinal))
-                {
-                    existingIndex = search;
-                    break;
-                }
-            }
-
-            if (existingIndex >= 0)
-            {
-                _materialRows.Move(existingIndex, index);
-            }
-            else
-            {
-                _materialRows.Insert(index, new MaterialRow(material));
-            }
-        }
-
-        while (_materialRows.Count > materials.Count)
-        {
-            _materialRows.RemoveAt(_materialRows.Count - 1);
-        }
+        AddBasketButton.IsEnabled = _workspace.CanCreateTab;
+        ToolTipService.SetToolTip(
+            AddBasketButton,
+            _workspace.CanCreateTab ? "Создать корзину (Ctrl+T)" : "Достигнут предел в 10 корзин");
     }
 
     private void RefreshStatus()
     {
         var status = _workspace.StatusMessage;
-        if (string.IsNullOrWhiteSpace(status) || string.Equals(status, _hiddenStatus, StringComparison.Ordinal))
-        {
-            return;
-        }
+        StatusText.Text = status ?? string.Empty;
 
-        ShowStatus(status, InfoBarSeverity.Informational);
+        if (_workspace.StatusIsError && !string.IsNullOrWhiteSpace(status))
+        {
+            StatusInfoBar.Severity = InfoBarSeverity.Error;
+            StatusInfoBar.Message = status;
+            StatusInfoBar.IsOpen = true;
+        }
+        else
+        {
+            StatusInfoBar.IsOpen = false;
+        }
     }
 
-    private void ShowStatus(string message, InfoBarSeverity severity)
+    private void ShowError(string message)
     {
-        StatusInfoBar.Severity = severity;
+        StatusText.Text = message;
+        StatusInfoBar.Severity = InfoBarSeverity.Error;
         StatusInfoBar.Message = message;
         StatusInfoBar.IsOpen = true;
-        _statusTimer.Stop();
-        _statusTimer.Start();
     }
 
-    private void HideStatusBar()
+    // ---- Basket rail -------------------------------------------------------------------
+
+    private void RefreshBaskets()
     {
-        _hiddenStatus = _workspace.StatusMessage;
-        StatusInfoBar.IsOpen = false;
+        var signature = string.Join(
+            '\u001f',
+            _workspace.Tabs.Select(tab => tab.Uid + '\u001e' + tab.DisplayName)) +
+            '\u001f' + _workspace.CanCloseTab +
+            '\u001f' + _workspace.ActiveTab?.Uid;
+
+        if (string.Equals(signature, _basketSignature, StringComparison.Ordinal))
+        {
+            SelectActiveBasketRow();
+            return;
+        }
+
+        _basketSignature = signature;
+        var activeUid = _workspace.ActiveTab?.Uid;
+        _basketRows.Clear();
+
+        foreach (var tab in _workspace.Tabs)
+        {
+            _basketRows.Add(new BasketRow(
+                tab,
+                string.Equals(tab.Uid, activeUid, StringComparison.Ordinal),
+                _workspace.CanCloseTab));
+        }
+
+        SelectActiveBasketRow();
     }
 
-    // ---- Tabs --------------------------------------------------------------------------
-
-    private void OnTabSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void SelectActiveBasketRow()
     {
-        if (_isUpdatingUi)
+        var activeUid = _workspace.ActiveTab?.Uid;
+        var row = _basketRows.FirstOrDefault(candidate =>
+            string.Equals(candidate.Uid, activeUid, StringComparison.Ordinal));
+
+        if (row is not null && !ReferenceEquals(BasketsList.SelectedItem, row))
+        {
+            BasketsList.SelectedItem = row;
+        }
+    }
+
+    private void UpdateAddButtonState() => AddBasketButton.IsEnabled = _workspace.CanCreateTab;
+
+    private void OnAddBasketClick(object sender, RoutedEventArgs e) => _workspace.CreateTab();
+
+    private void OnBasketSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingUi || _isBasketDrag)
         {
             return;
         }
 
-        if (BasketsTabView.SelectedItem is TabViewItem item &&
-            item.Tag is string uid &&
-            !string.Equals(_workspace.ActiveTab?.Uid, uid, StringComparison.Ordinal))
+        if (BasketsList.SelectedItem is BasketRow row &&
+            !string.Equals(_workspace.ActiveTab?.Uid, row.Uid, StringComparison.Ordinal))
         {
-            _workspace.ActivateTab(uid);
+            _selectedNode = null;
+            _workspace.ActivateTab(row.Uid);
+            StartWatcher();
         }
     }
 
-    private void OnAddTabButtonClick(TabView sender, object args) => _workspace.CreateTab();
-
-    private void OnTabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
+    private void OnBasketRowDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (args.Tab?.Tag is string uid)
-        {
-            _workspace.CloseTab(uid);
-        }
-    }
-
-    /// <summary>
-    /// The built-in TabView reorder mutates <see cref="TabView.TabItems"/>. The workspace order is
-    /// synced after the current input event (Remove+Insert may arrive as two changes), and skipped
-    /// while the strip is being rebuilt from the workspace itself.
-    /// </summary>
-    private void OnTabItemsChanged(TabView sender, IVectorChangedEventArgs args)
-    {
-        if (_isUpdatingUi || _tabOrderSyncScheduled)
-        {
-            return;
-        }
-
-        _tabOrderSyncScheduled = true;
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            _tabOrderSyncScheduled = false;
-            PersistTabOrder();
-        });
-    }
-
-    private void PersistTabOrder()
-    {
-        if (_isUpdatingUi)
-        {
-            return;
-        }
-
-        var uids = BasketsTabView.TabItems
-            .OfType<TabViewItem>()
-            .Select(item => item.Tag as string)
-            .Where(uid => !string.IsNullOrEmpty(uid))
-            .Cast<string>()
-            .ToList();
-
-        // Transient states during Add/Remove are ignored: the workspace drives those itself.
-        if (uids.Count != _workspace.Tabs.Count)
-        {
-            return;
-        }
-
-        _workspace.ReorderTabs(uids);
-    }
-
-    private void OnBasketsTabViewKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        // While the tab title is being edited, Ctrl+Shift+Left/Right belongs to the text box.
-        if (_editingTabUid is not null)
-        {
-            return;
-        }
-
-        var ctrlDown = InputKeyboardSource
-            .GetKeyStateForCurrentThread(VirtualKey.Control)
-            .HasFlag(CoreVirtualKeyStates.Down);
-        var shiftDown = InputKeyboardSource
-            .GetKeyStateForCurrentThread(VirtualKey.Shift)
-            .HasFlag(CoreVirtualKeyStates.Down);
-        if (!ctrlDown || !shiftDown)
-        {
-            return;
-        }
-
-        if (e.Key == VirtualKey.Left)
+        if (sender is FrameworkElement element && element.DataContext is BasketRow row)
         {
             e.Handled = true;
-            MoveActiveTab(-1);
-        }
-        else if (e.Key == VirtualKey.Right)
-        {
-            e.Handled = true;
-            MoveActiveTab(1);
+            BeginBasketRename(row);
         }
     }
 
-    private void MoveActiveTab(int offset)
+    private void BeginBasketRename(BasketRow row)
     {
-        var uid = _workspace.ActiveTab?.Uid;
-        if (uid is not null)
-        {
-            _workspace.MoveTab(uid, offset);
-        }
-    }
-
-    private void OnTabDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-    {
-        if (sender is TabViewItem item && item.Tag is string uid)
-        {
-            e.Handled = true;
-            BeginTabRename(item, uid);
-        }
-    }
-
-    private void BeginTabRename(TabViewItem item, string uid)
-    {
-        if (_editingTabUid is not null)
+        if (_editingBasketUid is not null)
         {
             return;
         }
 
-        var current = _workspace.Tabs.FirstOrDefault(tab => tab.Uid == uid)?.DisplayName ?? string.Empty;
-        var editor = new TextBox
-        {
-            Text = current,
-            MinWidth = 120,
-            MaxWidth = 220,
-            Padding = new Thickness(6, 2, 6, 2),
-        };
-
-        _editingTabUid = uid;
-        _editingTabOriginalName = current;
-
-        editor.KeyDown += (_, args) =>
-        {
-            if (args.Key == VirtualKey.Enter)
-            {
-                args.Handled = true;
-                CommitTabRename(item, uid, editor.Text);
-            }
-            else if (args.Key == VirtualKey.Escape)
-            {
-                args.Handled = true;
-                CancelTabRename(item, current);
-            }
-        };
-        editor.LostFocus += (_, _) => CommitTabRename(item, uid, editor.Text);
-
-        item.Header = editor;
-        editor.Focus(FocusState.Programmatic);
-        editor.SelectAll();
-    }
-
-    private void CommitTabRename(TabViewItem item, string uid, string text)
-    {
-        if (!string.Equals(_editingTabUid, uid, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _editingTabUid = null;
-        item.Header = _editingTabOriginalName ?? text;
-        _workspace.RenameTab(uid, text);
-        RefreshAll();
-    }
-
-    private void CancelTabRename(TabViewItem item, string originalName)
-    {
-        _editingTabUid = null;
-        item.Header = originalName;
-    }
-
-    // ---- Materials ---------------------------------------------------------------------
-
-    private void OnMaterialSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isUpdatingUi)
-        {
-            return;
-        }
-
-        _selectedRow = MaterialsList.SelectedItem as MaterialRow;
-    }
-
-    private void OnMaterialDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-    {
-        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
-        {
-            _workspace.OpenMaterial(row.Material);
-            e.Handled = true;
-        }
-    }
-
-    private void OnCopyMaterialPathClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
-        {
-            _workspace.CopyMaterialPath(row.Material);
-        }
-    }
-
-    private void OnRenameMaterialClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
-        {
-            BeginRenameMaterial(row);
-        }
-    }
-
-    /// <summary>
-    /// Double-click on the title starts renaming; double-click anywhere else in the row keeps the
-    /// default command (open the material). The handled flag keeps the two paths from overlapping.
-    /// </summary>
-    private void OnMaterialTitleDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-    {
-        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
-        {
-            e.Handled = true;
-            BeginRenameMaterial(row);
-        }
-    }
-
-    private void OnRenameSaveClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
-        {
-            CommitMaterialRename(row);
-        }
-    }
-
-    private void OnRenameCancelClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement element && element.DataContext is MaterialRow row)
-        {
-            row.EndEdit();
-        }
-    }
-
-    private void OnRenameBoxTextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (sender is TextBox textBox && textBox.DataContext is MaterialRow row)
-        {
-            row.EditText = textBox.Text;
-        }
-    }
-
-    private void OnRenameBoxKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (sender is not TextBox textBox || textBox.DataContext is not MaterialRow row)
-        {
-            return;
-        }
-
-        if (e.Key == VirtualKey.Enter)
-        {
-            e.Handled = true;
-            row.EditText = textBox.Text;
-            CommitMaterialRename(row);
-        }
-        else if (e.Key == VirtualKey.Escape)
-        {
-            e.Handled = true;
-            row.EndEdit();
-        }
-    }
-
-    private void CommitMaterialRename(MaterialRow row)
-    {
-        if (!_workspace.RenameMaterial(row.Material, row.EditText))
-        {
-            row.EndEdit();
-        }
-    }
-
-    private void BeginRenameMaterial(MaterialRow row)
-    {
-        MaterialsList.SelectedItem = row;
-        _selectedRow = row;
+        _editingBasketUid = row.Uid;
         row.BeginEdit();
 
         DispatcherQueue.TryEnqueue(() =>
         {
-            var container = MaterialsList.ContainerFromItem(row) as ListViewItem;
+            var container = BasketsList.ContainerFromItem(row) as ListViewItem;
             var editor = container is null ? null : FindDescendant<TextBox>(container);
             if (editor is not null)
             {
@@ -923,9 +694,482 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    private void OnMaterialsKeyDown(object sender, KeyRoutedEventArgs e)
+    private void OnBasketRenameTextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_selectedRow is null || _selectedRow.IsEditing)
+        if (sender is TextBox textBox && textBox.DataContext is BasketRow row)
+        {
+            row.EditText = textBox.Text;
+        }
+    }
+
+    private void OnBasketRenameKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not TextBox textBox || textBox.DataContext is not BasketRow row)
+        {
+            return;
+        }
+
+        if (e.Key == VirtualKey.Enter)
+        {
+            e.Handled = true;
+            CommitBasketRename(row);
+        }
+        else if (e.Key == VirtualKey.Escape)
+        {
+            e.Handled = true;
+            CancelBasketRename(row);
+        }
+    }
+
+    private void OnBasketRenameLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox textBox && textBox.DataContext is BasketRow row)
+        {
+            CommitBasketRename(row);
+        }
+    }
+
+    private void CommitBasketRename(BasketRow row)
+    {
+        if (!string.Equals(_editingBasketUid, row.Uid, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _editingBasketUid = null;
+        row.EndEdit();
+        _workspace.RenameTab(row.Uid, row.EditText);
+        RefreshAll();
+    }
+
+    private void CancelBasketRename(BasketRow row)
+    {
+        _editingBasketUid = null;
+        row.EndEdit();
+    }
+
+    private void OnCloseBasketClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is BasketRow row)
+        {
+            _workspace.CloseTab(row.Uid);
+        }
+    }
+
+    private void OnBasketRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        var row = FindBasketRowFromSource(e.OriginalSource as DependencyObject);
+        if (row is null)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        BasketsList.SelectedItem = row;
+
+        var flyout = new MenuFlyout();
+
+        var open = new MenuFlyoutItem { Text = "Открыть папку в Проводнике" };
+        open.Click += (_, _) =>
+        {
+            if (_workspace.ActivateTab(row.Uid))
+            {
+                _workspace.OpenActiveBasketFolder();
+            }
+        };
+
+        var rename = new MenuFlyoutItem { Text = "Переименовать" };
+        rename.Click += (_, _) => BeginBasketRename(row);
+
+        var close = new MenuFlyoutItem { Text = "Закрыть корзину…" };
+        close.Click += (_, _) => _workspace.CloseTab(row.Uid);
+
+        flyout.Items.Add(open);
+        flyout.Items.Add(rename);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(close);
+        flyout.ShowAt(BasketsList, new FlyoutShowOptions { Position = e.GetPosition(BasketsList) });
+    }
+
+    private void OnBasketDragItemsStarting(object sender, DragItemsStartingEventArgs e)
+    {
+        _isBasketDrag = true;
+    }
+
+    private void OnBasketDragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+    {
+        _isBasketDrag = false;
+        if (_isUpdatingUi)
+        {
+            return;
+        }
+
+        var order = _basketRows.Select(row => row.Uid).ToList();
+        if (order.Count == _workspace.Tabs.Count)
+        {
+            _workspace.ReorderTabs(order);
+        }
+
+        SelectActiveBasketRow();
+    }
+
+    private void MoveActiveBasket(int offset)
+    {
+        var uid = _workspace.ActiveTab?.Uid;
+        if (uid is not null)
+        {
+            _workspace.MoveTab(uid, offset);
+        }
+    }
+
+    private void OnBasketNumberAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        args.Handled = true;
+        var index = (int)sender.Key - (int)VirtualKey.Number1;
+        if (index == 8)
+        {
+            index = _basketRows.Count - 1;
+        }
+
+        if (index >= 0 && index < _basketRows.Count)
+        {
+            BasketsList.SelectedItem = _basketRows[index];
+        }
+    }
+
+    private void OnNewBasketAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        args.Handled = true;
+        _workspace.CreateTab();
+    }
+
+    private void OnCloseBasketAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        args.Handled = true;
+        var uid = _workspace.ActiveTab?.Uid;
+        if (uid is not null)
+        {
+            _workspace.CloseTab(uid);
+        }
+    }
+
+    private void OnMoveBasketUpAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (IsTextInputFocused())
+        {
+            return;
+        }
+
+        args.Handled = true;
+        MoveActiveBasket(-1);
+    }
+
+    private void OnMoveBasketDownAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (IsTextInputFocused())
+        {
+            return;
+        }
+
+        args.Handled = true;
+        MoveActiveBasket(1);
+    }
+
+    // ---- File tree ---------------------------------------------------------------------
+
+    private void RefreshTree()
+    {
+        var desiredPath = _selectedNode?.RelativePath;
+        if (string.IsNullOrEmpty(desiredPath))
+        {
+            desiredPath = _workspace.SelectedFolder;
+        }
+
+        var expanded = CollectExpandedPaths();
+        FileTree.RootNodes.Clear();
+
+        var tab = _workspace.ActiveTab;
+        if (tab is null)
+        {
+            _selectedNode = null;
+            EmptyStatePanel.Visibility = Visibility.Visible;
+            ShowPreview(null);
+            return;
+        }
+
+        var rootNode = new TreeViewNode
+        {
+            Content = new EntryNode(tab.DisplayName, string.Empty, tab.DirectoryPath, isFolder: true),
+            IsExpanded = true,
+            HasUnrealizedChildren = _workspace.HasEntries(string.Empty),
+        };
+
+        FileTree.RootNodes.Add(rootNode);
+        rootNode.IsExpanded = true;
+        FillTreeNode(rootNode);
+        rootNode.IsExpanded = true;
+
+        foreach (var path in expanded)
+        {
+            SelectTreePath(rootNode, path, select: false);
+        }
+
+        var selected = SelectTreePath(rootNode, desiredPath, select: true) ??
+            SelectTreePath(rootNode, ParentFolder(desiredPath), select: true) ??
+            rootNode;
+
+        FileTree.SelectedNode = selected;
+        _selectedNode = selected.Content as EntryNode;
+        UpdateSelection();
+        EmptyStatePanel.Visibility = rootNode.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void FillTreeNode(TreeViewNode node)
+    {
+        if (node.Content is not EntryNode folder || !folder.IsFolder)
+        {
+            return;
+        }
+
+        node.Children.Clear();
+        foreach (var entry in _workspace.GetEntries(folder.RelativePath))
+        {
+            node.Children.Add(new TreeViewNode
+            {
+                Content = new EntryNode(entry),
+                HasUnrealizedChildren = entry.IsFolder && _workspace.HasEntries(entry.RelativePath),
+            });
+        }
+
+        node.HasUnrealizedChildren = false;
+    }
+
+    private TreeViewNode? SelectTreePath(TreeViewNode root, string? relativePath, bool select)
+    {
+        var normalized = relativePath ?? string.Empty;
+        if (normalized.Length == 0)
+        {
+            if (select)
+            {
+                FileTree.SelectedNode = root;
+            }
+
+            return root;
+        }
+
+        var current = root;
+        var prefix = string.Empty;
+        foreach (var part in normalized.Split(
+            Path.DirectorySeparatorChar,
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            prefix = prefix.Length == 0 ? part : Path.Combine(prefix, part);
+            if (current.HasUnrealizedChildren)
+            {
+                FillTreeNode(current);
+            }
+
+            var next = current.Children
+                .OfType<TreeViewNode>()
+                .FirstOrDefault(node => node.Content is EntryNode entry &&
+                    string.Equals(entry.RelativePath, prefix, StringComparison.OrdinalIgnoreCase));
+            if (next is null)
+            {
+                return null;
+            }
+
+            if (next.Content is EntryNode { IsFolder: true })
+            {
+                next.IsExpanded = true;
+            }
+
+            current = next;
+        }
+
+        if (select)
+        {
+            FileTree.SelectedNode = current;
+        }
+
+        return current;
+    }
+
+    private HashSet<string> CollectExpandedPaths()
+    {
+        var expanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in FileTree.RootNodes)
+        {
+            CollectExpandedPaths(root, expanded);
+        }
+
+        return expanded;
+    }
+
+    private static void CollectExpandedPaths(TreeViewNode node, HashSet<string> expanded)
+    {
+        if (node.Content is EntryNode { IsFolder: true } entry && node.IsExpanded)
+        {
+            expanded.Add(entry.RelativePath);
+        }
+
+        foreach (var child in node.Children)
+        {
+            CollectExpandedPaths(child, expanded);
+        }
+    }
+
+    private void OnTreeExpanding(TreeView sender, TreeViewExpandingEventArgs args)
+    {
+        if (args.Node.HasUnrealizedChildren)
+        {
+            FillTreeNode(args.Node);
+        }
+    }
+
+    private void OnTreeSelectionChanged(TreeView sender, TreeViewSelectionChangedEventArgs args)
+    {
+        if (_isUpdatingUi)
+        {
+            return;
+        }
+
+        _selectedNode = FileTree.SelectedNode?.Content as EntryNode;
+        if (FileTree.SelectedNode is { HasUnrealizedChildren: true } selectedNode)
+        {
+            // Prime the first level so expanding a folder works even when the expand comes from
+            // UI Automation or another programmatic source.
+            FillTreeNode(selectedNode);
+        }
+
+        UpdateSelection();
+    }
+
+    private string CurrentFolder => _selectedNode switch
+    {
+        null => string.Empty,
+        { IsFolder: true } folder => folder.RelativePath,
+        _ => ParentFolder(_selectedNode.RelativePath),
+    };
+
+    private static string ParentFolder(string? relativePath)
+    {
+        if (string.IsNullOrEmpty(relativePath))
+        {
+            return string.Empty;
+        }
+
+        return Path.GetDirectoryName(relativePath) ?? string.Empty;
+    }
+
+    private void UpdateSelection()
+    {
+        var folder = CurrentFolder;
+        _workspace.RememberFolder(folder);
+        BasketPathText.Text = _workspace.SelectedFolderPath;
+        ToolTipService.SetToolTip(BasketPathText, _workspace.SelectedFolderPath);
+        UpButton.IsEnabled = folder.Length > 0;
+        FileCountText.Text = RussianPlural.Items(CurrentFolderItemCount());
+
+        RefreshBreadcrumb();
+        ShowPreview(_selectedNode);
+    }
+
+    private int CurrentFolderItemCount()
+    {
+        var node = FileTree.SelectedNode;
+        if (node is null)
+        {
+            return 0;
+        }
+
+        var folderNode = node.Content is EntryNode { IsFolder: true } ? node : node.Parent;
+        return folderNode?.Children.Count ?? 0;
+    }
+
+    private void RefreshBreadcrumb()
+    {
+        var tab = _workspace.ActiveTab;
+        if (tab is null)
+        {
+            FolderBreadcrumb.ItemsSource = Array.Empty<FolderCrumb>();
+            return;
+        }
+
+        var crumbs = new List<FolderCrumb> { new(tab.DisplayName, string.Empty) };
+        var current = string.Empty;
+        foreach (var part in CurrentFolder.Split(
+            Path.DirectorySeparatorChar,
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = current.Length == 0 ? part : Path.Combine(current, part);
+            crumbs.Add(new FolderCrumb(part, current));
+        }
+
+        FolderBreadcrumb.ItemsSource = crumbs;
+    }
+
+    private void OnBreadcrumbItemClicked(BreadcrumbBar sender, BreadcrumbBarItemClickedEventArgs args)
+    {
+        if (args.Item is FolderCrumb crumb && FileTree.RootNodes.Count > 0)
+        {
+            _selectedNode = null;
+            SelectTreePath(FileTree.RootNodes[0], crumb.RelativePath, select: true);
+        }
+    }
+
+    private void OnUpClick(object sender, RoutedEventArgs e) => SelectParentFolder();
+
+    private void OnUpAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (IsTextInputFocused())
+        {
+            return;
+        }
+
+        args.Handled = true;
+        SelectParentFolder();
+    }
+
+    private void SelectParentFolder()
+    {
+        var folder = CurrentFolder;
+        if (folder.Length == 0 || FileTree.RootNodes.Count == 0)
+        {
+            return;
+        }
+
+        _selectedNode = null;
+        SelectTreePath(FileTree.RootNodes[0], ParentFolder(folder), select: true);
+    }
+
+    private void OnTreeEntryDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (e.OriginalSource is TextBox)
+        {
+            return;
+        }
+
+        if (sender is not FrameworkElement element ||
+            element.DataContext is not TreeViewNode node ||
+            node.Content is not EntryNode entry)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (entry.IsFolder)
+        {
+            node.IsExpanded = !node.IsExpanded;
+        }
+        else if (entry.Material is not null)
+        {
+            _workspace.OpenMaterial(entry.Material);
+        }
+    }
+
+    private void OnTreeKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.OriginalSource is TextBox || _selectedNode is null)
         {
             return;
         }
@@ -933,39 +1177,38 @@ public sealed partial class MainWindow : Window
         var shiftDown = InputKeyboardSource
             .GetKeyStateForCurrentThread(VirtualKey.Shift)
             .HasFlag(CoreVirtualKeyStates.Down);
-        var altDown = InputKeyboardSource
-            .GetKeyStateForCurrentThread(VirtualKey.Menu)
-            .HasFlag(CoreVirtualKeyStates.Down);
 
         switch (e.Key)
         {
             case VirtualKey.F2:
+                if (_selectedNode.IsRoot)
+                {
+                    break;
+                }
+
                 e.Handled = true;
-                BeginRenameMaterial(_selectedRow);
+                BeginNodeRename(_selectedNode);
                 break;
 
             case VirtualKey.Delete:
-                e.Handled = true;
-                _workspace.DeleteMaterial(_selectedRow.Material);
-                break;
+                if (_selectedNode.IsRoot)
+                {
+                    break;
+                }
 
-            // Keyboard alternative to dragging, so reordering is not mouse-only (Windows UX
-            // guidance: don't make double-clicking and dragging the only way to act).
-            case VirtualKey.Up when altDown:
                 e.Handled = true;
-                _workspace.MoveMaterial(_selectedRow.Material, -1);
-                break;
-
-            case VirtualKey.Down when altDown:
-                e.Handled = true;
-                _workspace.MoveMaterial(_selectedRow.Material, 1);
+                DeleteNode(_selectedNode);
                 break;
 
             case VirtualKey.Enter:
-                if (e.OriginalSource is not TextBox)
+                e.Handled = true;
+                if (_selectedNode.IsFolder && FileTree.SelectedNode is { } selectedNode)
                 {
-                    e.Handled = true;
-                    _workspace.OpenMaterial(_selectedRow.Material);
+                    selectedNode.IsExpanded = !selectedNode.IsExpanded;
+                }
+                else if (_selectedNode.Material is not null)
+                {
+                    _workspace.OpenMaterial(_selectedNode.Material);
                 }
 
                 break;
@@ -973,106 +1216,334 @@ public sealed partial class MainWindow : Window
             case VirtualKey.Application:
             case VirtualKey.F10 when shiftDown:
                 e.Handled = true;
-                ShowMaterialContextMenu(_selectedRow, GetSelectedRowPosition());
+                ShowNodeContextMenu(_selectedNode, GetSelectedNodePosition());
                 break;
         }
     }
 
-    private void OnMaterialsRightTapped(object sender, RightTappedRoutedEventArgs e)
+    private void OnTreeRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        var row = FindRowFromSource(e.OriginalSource as DependencyObject);
-        if (row is null)
+        var node = FindTreeViewNodeFromSource(e.OriginalSource as DependencyObject);
+        if (node?.Content is not EntryNode entry)
         {
             return;
         }
 
         e.Handled = true;
-        MaterialsList.SelectedItem = row;
-        _selectedRow = row;
-        ShowMaterialContextMenu(row, e.GetPosition(MaterialsList));
+        FileTree.SelectedNode = node;
+        _selectedNode = entry;
+        ShowNodeContextMenu(entry, e.GetPosition(FileTree));
     }
 
-    private void ShowMaterialContextMenu(MaterialRow row, Point position)
+    private void ShowNodeContextMenu(EntryNode node, Point position)
     {
         var flyout = new MenuFlyout();
 
-        var openItem = new MenuFlyoutItem { Text = "Открыть" };
-        openItem.Click += (_, _) => _workspace.OpenMaterial(row.Material);
-
-        var renameItem = new MenuFlyoutItem { Text = "Переименовать" };
-        renameItem.Click += (_, _) => BeginRenameMaterial(row);
-
-        // The row button is the fast pointer path; the context menu is the input-agnostic one
-        // (keyboard, touch), as Microsoft's contextual commanding guidance requires.
-        var copyPathItem = new MenuFlyoutItem { Text = "Скопировать путь" };
-        copyPathItem.Click += (_, _) => _workspace.CopyMaterialPath(row.Material);
-
-        var rowIndex = _materialRows.IndexOf(row);
-        var moveUpItem = new MenuFlyoutItem
+        var open = new MenuFlyoutItem { Text = node.IsFolder ? "Развернуть / свернуть" : "Открыть" };
+        open.Click += (_, _) =>
         {
-            Text = "Переместить вверх",
-            IsEnabled = rowIndex > 0,
+            if (node.IsFolder && FileTree.SelectedNode is { } selectedNode)
+            {
+                selectedNode.IsExpanded = !selectedNode.IsExpanded;
+            }
+            else if (node.Material is not null)
+            {
+                _workspace.OpenMaterial(node.Material);
+            }
         };
-        moveUpItem.Click += (_, _) => _workspace.MoveMaterial(row.Material, -1);
 
-        var moveDownItem = new MenuFlyoutItem
+        var explore = new MenuFlyoutItem { Text = "Открыть в Проводнике" };
+        explore.Click += (_, _) =>
         {
-            Text = "Переместить вниз",
-            IsEnabled = rowIndex >= 0 && rowIndex < _materialRows.Count - 1,
+            if (node.IsFolder)
+            {
+                _workspace.OpenFolderInExplorer(node.Entry);
+            }
+            else
+            {
+                _workspace.OpenActiveBasketFolder();
+            }
         };
-        moveDownItem.Click += (_, _) => _workspace.MoveMaterial(row.Material, 1);
 
-        var deleteItem = new MenuFlyoutItem { Text = "Удалить…" };
-        deleteItem.Click += (_, _) => _workspace.DeleteMaterial(row.Material);
+        var copyPath = new MenuFlyoutItem { Text = "Скопировать путь" };
+        copyPath.Click += (_, _) => _workspace.CopyEntryPath(node.Entry);
 
-        flyout.Items.Add(openItem);
-        flyout.Items.Add(renameItem);
-        flyout.Items.Add(copyPathItem);
-        flyout.Items.Add(new MenuFlyoutSeparator());
-        flyout.Items.Add(moveUpItem);
-        flyout.Items.Add(moveDownItem);
-        flyout.Items.Add(new MenuFlyoutSeparator());
-        flyout.Items.Add(deleteItem);
-        flyout.ShowAt(MaterialsList, new FlyoutShowOptions { Position = position });
+        flyout.Items.Add(open);
+        flyout.Items.Add(explore);
+        flyout.Items.Add(copyPath);
+
+        if (!node.IsRoot)
+        {
+            var rename = new MenuFlyoutItem { Text = "Переименовать" };
+            rename.Click += (_, _) => BeginNodeRename(node);
+
+            var cut = new MenuFlyoutItem { Text = "Вырезать" };
+            cut.Click += (_, _) => CopyOrCutNode(node, move: true);
+
+            var copy = new MenuFlyoutItem { Text = "Копировать" };
+            copy.Click += (_, _) => CopyOrCutNode(node, move: false);
+
+            var delete = new MenuFlyoutItem { Text = "Удалить…" };
+            delete.Click += (_, _) => DeleteNode(node);
+
+            flyout.Items.Add(rename);
+            flyout.Items.Add(new MenuFlyoutSeparator());
+            flyout.Items.Add(cut);
+            flyout.Items.Add(copy);
+            flyout.Items.Add(new MenuFlyoutSeparator());
+            flyout.Items.Add(delete);
+        }
+
+        flyout.ShowAt(FileTree, new FlyoutShowOptions { Position = position });
     }
 
-    private Point GetSelectedRowPosition()
+    private Point GetSelectedNodePosition()
     {
-        if (_selectedRow is not null && MaterialsList.ContainerFromItem(_selectedRow) is ListViewItem container)
+        if (FileTree.SelectedNode is { } node &&
+            FileTree.ContainerFromNode(node) is TreeViewItem container)
         {
             try
             {
-                var topLeft = container.TransformToVisual(MaterialsList).TransformPoint(new Point(0, 0));
+                var topLeft = container.TransformToVisual(FileTree).TransformPoint(new Point(0, 0));
                 return new Point(topLeft.X + 24, topLeft.Y + Math.Max(8, container.ActualHeight / 2));
             }
             catch (Exception)
             {
-                // Fall back to a corner of the list.
+                // Fall back to a corner of the tree.
             }
         }
 
         return new Point(16, 16);
     }
 
-    private static MaterialRow? FindRowFromSource(DependencyObject? source)
+    private void DeleteNode(EntryNode node)
     {
-        var current = source;
-        while (current is not null)
+        if (node.IsRoot)
         {
-            if (current is FrameworkElement element && element.DataContext is MaterialRow row)
-            {
-                return row;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
+            return;
         }
 
-        return null;
+        if (node.IsFolder)
+        {
+            _workspace.DeleteFolder(node.Entry);
+        }
+        else if (node.Material is not null)
+        {
+            _workspace.DeleteMaterial(node.Material);
+        }
+    }
+
+    private void BeginNodeRename(EntryNode node)
+    {
+        if (node.IsRoot)
+        {
+            return;
+        }
+
+        node.BeginEdit();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (FileTree.SelectedNode is not { } treeNode)
+            {
+                return;
+            }
+
+            var container = FileTree.ContainerFromNode(treeNode) as TreeViewItem;
+            var editor = container is null ? null : FindDescendant<TextBox>(container);
+            if (editor is not null)
+            {
+                editor.Focus(FocusState.Programmatic);
+                editor.SelectAll();
+            }
+        });
+    }
+
+    private void OnNodeRenameTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is TextBox textBox && textBox.DataContext is TreeViewNode node &&
+            node.Content is EntryNode entry)
+        {
+            entry.EditText = textBox.Text;
+        }
+    }
+
+    private void OnNodeRenameKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (sender is not TextBox textBox || textBox.DataContext is not TreeViewNode node ||
+            node.Content is not EntryNode entry)
+        {
+            return;
+        }
+
+        if (e.Key == VirtualKey.Enter)
+        {
+            e.Handled = true;
+            entry.EditText = textBox.Text;
+            CommitNodeRename(entry);
+        }
+        else if (e.Key == VirtualKey.Escape)
+        {
+            e.Handled = true;
+            entry.EndEdit();
+        }
+    }
+
+    private void OnNodeRenameSaveClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is TreeViewNode node &&
+            node.Content is EntryNode entry)
+        {
+            CommitNodeRename(entry);
+        }
+    }
+
+    private void OnNodeRenameCancelClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is TreeViewNode node &&
+            node.Content is EntryNode entry)
+        {
+            entry.EndEdit();
+        }
+    }
+
+    private void CommitNodeRename(EntryNode node)
+    {
+        var success = node.IsFolder
+            ? _workspace.RenameFolder(node.Entry, node.EditText)
+            : node.Material is not null && _workspace.RenameMaterial(node.Material, node.EditText);
+
+        if (!success)
+        {
+            node.EndEdit();
+        }
+    }
+
+    // ---- Preview -----------------------------------------------------------------------
+
+    private void ShowPreview(EntryNode? node)
+    {
+        _previewSequence++;
+        PreviewImage.Source = null;
+        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewText.Text = string.Empty;
+        PreviewText.Visibility = Visibility.Collapsed;
+        PreviewPlaceholder.Text = "Выберите файл, чтобы увидеть его содержимое.";
+        PreviewPlaceholder.Visibility = Visibility.Visible;
+        PreviewOpenButton.IsEnabled = node is not null;
+        PreviewCopyPathButton.IsEnabled = node is not null;
+        PreviewPath.Text = string.Empty;
+
+        if (node is null)
+        {
+            PreviewTitle.Text = string.Empty;
+            PreviewMeta.Text = string.Empty;
+            return;
+        }
+
+        PreviewTitle.Text = node.Name;
+        PreviewMeta.Text = node.IsFolder
+            ? "Папка"
+            : $"{node.Entry.TypeLabel} · {node.SizeText} · {node.Entry.Modified.LocalDateTime.ToString("g", UiCulture)}";
+        PreviewPath.Text = node.FullPath;
+
+        if (node.IsFolder)
+        {
+            PreviewPlaceholder.Text = FileTree.SelectedNode?.IsExpanded == true
+                ? "Папка. Содержимое показано в дереве."
+                : "Папка. Разверните её в дереве, чтобы увидеть содержимое.";
+            return;
+        }
+
+        if (node.Entry.Kind == MaterialKind.Image)
+        {
+            _ = LoadPreviewImageAsync(node.FullPath, _previewSequence);
+            return;
+        }
+
+        if (node.Entry.Kind is MaterialKind.Text or MaterialKind.Link)
+        {
+            try
+            {
+                var text = MaterialPreview.ReadText(node.FullPath, MaxTextPreviewCharacters);
+                if (text.Length == MaxTextPreviewCharacters)
+                {
+                    text += Environment.NewLine + "…";
+                }
+
+                PreviewText.Text = text;
+                PreviewText.Visibility = Visibility.Visible;
+                PreviewPlaceholder.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                PreviewPlaceholder.Text = $"Не удалось прочитать файл: {ex.Message}";
+            }
+        }
+        else
+        {
+            PreviewPlaceholder.Text = "Для этого типа файла предпросмотр не поддерживается.";
+        }
+    }
+
+    private async Task LoadPreviewImageAsync(string path, int sequence)
+    {
+        try
+        {
+            var file = await StorageFile.GetFileFromPathAsync(path);
+            using var stream = await file.OpenReadAsync();
+            var bitmap = new BitmapImage { DecodePixelWidth = 480 };
+            await bitmap.SetSourceAsync(stream);
+
+            if (sequence != _previewSequence)
+            {
+                return;
+            }
+
+            PreviewImage.Source = bitmap;
+            PreviewImage.Visibility = Visibility.Visible;
+            PreviewPlaceholder.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception ex)
+        {
+            if (sequence == _previewSequence)
+            {
+                PreviewPlaceholder.Text = $"Не удалось показать изображение: {ex.Message}";
+            }
+        }
+    }
+
+    private void OnPreviewOpenClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedNode is null)
+        {
+            return;
+        }
+
+        if (_selectedNode.IsFolder)
+        {
+            _workspace.OpenFolderInExplorer(_selectedNode.Entry);
+        }
+        else if (_selectedNode.Material is not null)
+        {
+            _workspace.OpenMaterial(_selectedNode.Material);
+        }
+    }
+
+    private void OnPreviewCopyPathClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedNode is not null)
+        {
+            _workspace.CopyEntryPath(_selectedNode.Entry);
+        }
+        else
+        {
+            _workspace.CopyActiveBasketPath();
+        }
     }
 
     // ---- Clipboard, drag and drop, quick note -----------------------------------------
 
-    private void OnPasteClick(object sender, RoutedEventArgs e) => _workspace.AddFromClipboard();
+    private void OnPasteClick(object sender, RoutedEventArgs e) => PasteIntoCurrentFolder();
 
     private void OnPasteAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
@@ -1082,7 +1553,102 @@ public sealed partial class MainWindow : Window
         }
 
         args.Handled = true;
-        _workspace.AddFromClipboard();
+        PasteIntoCurrentFolder();
+    }
+
+    private void PasteIntoCurrentFolder()
+    {
+        var target = CurrentFolder;
+        if (!_workspace.TryReadClipboard(out var payload))
+        {
+            return;
+        }
+
+        if (payload.Kind == PasteContentKind.Files)
+        {
+            if (_cutPaths is not null && SamePaths(payload.Files, _cutPaths))
+            {
+                _workspace.PasteFiles(payload.Files, target, move: true);
+                _cutPaths = null;
+                _copyPaths = null;
+                return;
+            }
+
+            if (_copyPaths is not null && SamePaths(payload.Files, _copyPaths))
+            {
+                _workspace.PasteFiles(payload.Files, target, move: false);
+                _cutPaths = null;
+                _copyPaths = null;
+                return;
+            }
+        }
+
+        _cutPaths = null;
+        _copyPaths = null;
+        _workspace.AddPayload(payload, target);
+    }
+
+    private void OnCopyAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (IsTextInputFocused() || _selectedNode is null)
+        {
+            return;
+        }
+
+        args.Handled = true;
+        CopyOrCutNode(_selectedNode, move: false);
+    }
+
+    private void OnCutAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (IsTextInputFocused() || _selectedNode is null)
+        {
+            return;
+        }
+
+        args.Handled = true;
+        CopyOrCutNode(_selectedNode, move: true);
+    }
+
+    private void CopyOrCutNode(EntryNode node, bool move)
+    {
+        if (node.IsRoot)
+        {
+            return;
+        }
+
+        var paths = new List<string> { node.FullPath };
+        try
+        {
+            _shell.CopyFilesToClipboard(paths, move);
+            if (move)
+            {
+                _cutPaths = paths;
+                _copyPaths = null;
+                _workspace.ReportStatus($"«{node.Name}» вырезан в буфер обмена.");
+            }
+            else
+            {
+                _copyPaths = paths;
+                _cutPaths = null;
+                _workspace.ReportStatus($"«{node.Name}» скопирован в буфер обмена.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _confirmations.ShowError($"Не удалось скопировать в буфер обмена: {ex.Message}");
+        }
+    }
+
+    private static bool SamePaths(IReadOnlyList<string> left, IReadOnlyList<string> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        var set = new HashSet<string>(left, StringComparer.OrdinalIgnoreCase);
+        return right.All(set.Contains);
     }
 
     private bool IsTextInputFocused()
@@ -1091,97 +1657,163 @@ public sealed partial class MainWindow : Window
         return focused is TextBox or PasswordBox or RichEditBox or AutoSuggestBox;
     }
 
-    // ---- Reordering and external drag&drop ---------------------------------------------
+    private void OnSaveNoteClick(object sender, RoutedEventArgs e) => SaveQuickNote();
 
-    private void OnMaterialsDragItemsStarting(object sender, DragItemsStartingEventArgs e)
+    private void OnQuickNoteKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        // Reordering moves items within the same list, so the drag operation is a move (the
-        // WinUI Gallery reorder sample does the same in DragItemsStarting).
-        e.Data.RequestedOperation = DataPackageOperation.Move;
-        _internalReorderDrag = true;
-    }
-
-    private void OnMaterialsDragItemsCompleted(object sender, DragItemsCompletedEventArgs e)
-    {
-        _internalReorderDrag = false;
-        if (e.Items.Count > 0 && e.Items[0] is MaterialRow row)
+        if (e.Key == VirtualKey.Enter)
         {
-            _selectedRow = row;
-            MaterialsList.SelectedItem = row;
+            e.Handled = true;
+            SaveQuickNote();
         }
-
-        PersistMaterialOrder();
     }
 
-    /// <summary>
-    /// Stores the current row order after a drag. The list is bound to an ObservableCollection, so
-    /// the built-in ListView reorder has already moved the rows in it; saving reads that order.
-    /// </summary>
-    private void PersistMaterialOrder()
+    private void SaveQuickNote()
     {
-        if (_isUpdatingUi || _materialRows.Count == 0)
+        var text = QuickNoteTextBox.Text;
+        if (string.IsNullOrWhiteSpace(text))
         {
             return;
         }
 
-        _workspace.SaveMaterialOrder(_materialRows.Select(row => row.FileName).ToList());
-    }
-
-    // The ListView is a drop target for its own reordering; external files dropped onto it must
-    // keep bubbling to the same handlers the window uses, so the two drag kinds do not collide.
-    private void OnMaterialsDragEnter(object sender, DragEventArgs e)
-    {
-        if (!_internalReorderDrag)
+        _workspace.RememberFolder(CurrentFolder);
+        if (_workspace.AddQuickNote(text) is not null)
         {
-            OnRootDragEnter(sender, e);
+            QuickNoteTextBox.Text = string.Empty;
         }
     }
 
-    private void OnMaterialsDragLeave(object sender, DragEventArgs e)
+    // ---- New folder, refresh, header commands ------------------------------------------
+
+    private void OnNewFolderClick(object sender, RoutedEventArgs e) => CreateNewFolder();
+
+    private void OnNewFolderAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (!_internalReorderDrag)
+        if (IsTextInputFocused())
         {
-            OnRootDragLeave(sender, e);
+            return;
+        }
+
+        args.Handled = true;
+        CreateNewFolder();
+    }
+
+    private void CreateNewFolder()
+    {
+        _workspace.RememberFolder(CurrentFolder);
+        var folder = _workspace.CreateFolder("Новая папка", ensureUnique: true);
+        if (folder is null)
+        {
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (FileTree.RootNodes.Count == 0)
+            {
+                return;
+            }
+
+            var node = SelectTreePath(FileTree.RootNodes[0], folder.RelativePath, select: true);
+            if (node?.Content is EntryNode entry)
+            {
+                BeginNodeRename(entry);
+            }
+        });
+    }
+
+    private void OnRefreshClick(object sender, RoutedEventArgs e) => _workspace.Refresh();
+
+    private void OnRefreshAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        args.Handled = true;
+        _workspace.Refresh();
+    }
+
+    private void OnOpenFolderClick(object sender, RoutedEventArgs e)
+    {
+        _workspace.RememberFolder(CurrentFolder);
+        _workspace.OpenActiveBasketFolder();
+    }
+
+    private void OnCopyPathClick(object sender, RoutedEventArgs e)
+    {
+        _workspace.RememberFolder(CurrentFolder);
+        _workspace.CopyActiveBasketPath();
+    }
+
+    // ---- Drag and drop -----------------------------------------------------------------
+
+    private void OnTreeDragItemsStarting(TreeView sender, TreeViewDragItemsStartingEventArgs e)
+    {
+        _internalDragPaths.Clear();
+        if (_selectedNode is { IsRoot: false } selected)
+        {
+            _internalDragPaths.Add(selected.FullPath);
+        }
+
+        if (_internalDragPaths.Count > 0)
+        {
+            e.Data.RequestedOperation = DataPackageOperation.Move;
         }
     }
 
-    private void OnMaterialsDragOver(object sender, DragEventArgs e)
+    private void OnTreeDragItemsCompleted(TreeView sender, TreeViewDragItemsCompletedEventArgs args)
     {
-        if (!_internalReorderDrag)
-        {
-            OnRootDragOver(sender, e);
-        }
+        _internalDragPaths.Clear();
     }
 
-    private void OnMaterialsDrop(object sender, DragEventArgs e)
+    private void OnTreeEntryDragOver(object sender, DragEventArgs e)
     {
-        if (!_internalReorderDrag)
+        if (sender is not FrameworkElement element ||
+            element.DataContext is not TreeViewNode node ||
+            node.Content is not EntryNode { IsFolder: true } folder)
         {
-            OnRootDrop(sender, e);
+            return;
         }
+
+        e.AcceptedOperation = _internalDragPaths.Count > 0
+            ? DataPackageOperation.Move
+            : DataPackageOperation.Copy;
+        e.DragUIOverride.Caption = _internalDragPaths.Count > 0
+            ? $"Переместить в «{folder.Name}»"
+            : $"Скопировать в «{folder.Name}»";
+        e.DragUIOverride.IsCaptionVisible = true;
+        e.Handled = true;
     }
 
-    private void OnRootDragEnter(object sender, DragEventArgs e)
+    private async void OnTreeEntryDrop(object sender, DragEventArgs e)
     {
-        if (!_internalReorderDrag)
+        if (sender is not FrameworkElement element ||
+            element.DataContext is not TreeViewNode node ||
+            node.Content is not EntryNode { IsFolder: true } folder)
         {
-            UpdateDropHighlight(true);
+            return;
         }
+
+        e.Handled = true;
+        await DropIntoFolderAsync(e, folder.RelativePath);
     }
+
+    private void OnRootDragEnter(object sender, DragEventArgs e) => UpdateDropHighlight(true);
+
+    private void OnRootDragLeave(object sender, DragEventArgs e) => UpdateDropHighlight(false);
 
     private void OnRootDragOver(object sender, DragEventArgs e)
     {
-        // While the ListView reorders its own rows, the window must not reset AcceptedOperation:
-        // that cancels the built-in drop. External file drags fall through to the usual handling.
-        if (_internalReorderDrag)
+        if (_internalDragPaths.Count > 0)
         {
+            e.AcceptedOperation = DataPackageOperation.Move;
+            e.DragUIOverride.Caption = "Переместить в текущую папку";
+            e.DragUIOverride.IsCaptionVisible = true;
+            e.Handled = true;
             return;
         }
 
         if (e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             e.AcceptedOperation = DataPackageOperation.Copy;
-            e.DragUIOverride.Caption = "Добавить в корзину";
+            e.DragUIOverride.Caption = "Скопировать в корзину";
             e.DragUIOverride.IsCaptionVisible = true;
             e.Handled = true;
             UpdateDropHighlight(true);
@@ -1192,19 +1824,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnRootDragLeave(object sender, DragEventArgs e)
-    {
-        if (!_internalReorderDrag)
-        {
-            UpdateDropHighlight(false);
-        }
-    }
-
     private async void OnRootDrop(object sender, DragEventArgs e)
     {
         UpdateDropHighlight(false);
-        if (_internalReorderDrag)
+        await DropIntoFolderAsync(e, CurrentFolder);
+    }
+
+    private async Task DropIntoFolderAsync(DragEventArgs e, string targetFolder)
+    {
+        if (_internalDragPaths.Count > 0)
         {
+            e.Handled = true;
+            var paths = new List<string>(_internalDragPaths);
+            _internalDragPaths.Clear();
+            _workspace.MoveFiles(paths, targetFolder);
             return;
         }
 
@@ -1224,7 +1857,7 @@ public sealed partial class MainWindow : Window
 
             if (paths.Count > 0)
             {
-                _workspace.AddFiles(paths);
+                _workspace.AddFiles(paths, targetFolder);
             }
         }
         catch (Exception ex)
@@ -1235,45 +1868,45 @@ public sealed partial class MainWindow : Window
 
     private void UpdateDropHighlight(bool active)
     {
-        // Standard Button-style drag feedback: accent the list border while files hover the window.
-        MaterialsList.BorderThickness = active ? new Thickness(1) : new Thickness(0);
-        MaterialsList.BorderBrush = active
+        FileTree.BorderThickness = active ? new Thickness(1) : new Thickness(0);
+        FileTree.BorderBrush = active
             ? (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"]
             : null;
     }
 
-    private void OnQuickNoteKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == VirtualKey.Enter)
-        {
-            e.Handled = true;
-            SaveQuickNote();
-        }
-    }
-
-    private void OnSaveNoteClick(object sender, RoutedEventArgs e) => SaveQuickNote();
-
-    private void SaveQuickNote()
-    {
-        var text = QuickNoteTextBox.Text;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return;
-        }
-
-        if (_workspace.AddQuickNote(text) is not null)
-        {
-            QuickNoteTextBox.Text = string.Empty;
-        }
-    }
-
-    // ---- Header commands ---------------------------------------------------------------
-
-    private void OnOpenFolderClick(object sender, RoutedEventArgs e) => _workspace.OpenActiveBasketFolder();
-
-    private void OnCopyPathClick(object sender, RoutedEventArgs e) => _workspace.CopyActiveBasketPath();
-
     // ---- Helpers -----------------------------------------------------------------------
+
+    private static BasketRow? FindBasketRowFromSource(DependencyObject? source)
+    {
+        var current = source;
+        while (current is not null)
+        {
+            if (current is FrameworkElement element && element.DataContext is BasketRow row)
+            {
+                return row;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private static TreeViewNode? FindTreeViewNodeFromSource(DependencyObject? source)
+    {
+        var current = source;
+        while (current is not null)
+        {
+            if (current is FrameworkElement element && element.DataContext is TreeViewNode node)
+            {
+                return node;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
 
     private IntPtr GetWindowHandle()
     {
@@ -1307,4 +1940,3 @@ public sealed partial class MainWindow : Window
         return null;
     }
 }
-

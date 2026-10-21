@@ -1,0 +1,139 @@
+using System.ComponentModel;
+using System.Globalization;
+using System.IO;
+using System.Runtime.CompilerServices;
+using Microsoft.UI.Xaml;
+using PasteHatch.Core;
+
+namespace PasteHatch.Ui;
+
+/// <summary>
+/// Content of one file-tree node: a folder or a material. It carries display and inline-rename
+/// state only; the file system remains the source of truth.
+/// </summary>
+public sealed class EntryNode : INotifyPropertyChanged
+{
+    private bool _isEditing;
+    private string _editText;
+
+    public EntryNode(BasketEntry entry)
+    {
+        Entry = entry;
+        _editText = entry.IsFolder ? entry.Name : Path.GetFileNameWithoutExtension(entry.Name);
+        Material = entry.IsFolder
+            ? null
+            : new Material(entry.Name, entry.FullPath, entry.Kind)
+            {
+                RelativePath = entry.RelativePath,
+                Size = entry.Size,
+                Modified = entry.Modified,
+            };
+    }
+
+    public EntryNode(string name, string relativePath, string fullPath, bool isFolder, long size = 0, DateTimeOffset modified = default)
+        : this(new BasketEntry(name, fullPath, relativePath, isFolder, MaterialKind.File)
+        {
+            Size = size,
+            Modified = modified,
+        })
+    {
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public BasketEntry Entry { get; }
+
+    public Material? Material { get; }
+
+    public bool IsFolder => Entry.IsFolder;
+
+    public bool IsRoot => RelativePath.Length == 0;
+
+    public string Name => Entry.Name;
+
+    public string FullPath => Entry.FullPath;
+
+    public string RelativePath => Entry.RelativePath;
+
+    public string Extension => IsFolder ? string.Empty : Path.GetExtension(Name);
+
+    public string TypeLabel => Entry.TypeLabel;
+
+    public string SizeText => IsFolder ? string.Empty : FormatSize(Entry.Size);
+
+    public string SecondaryText => IsFolder ? "Папка" : $"{Entry.TypeLabel} · {SizeText}";
+
+    public string Glyph => IsFolder
+        ? "\uE8B7"
+        : Entry.Kind switch
+        {
+            MaterialKind.Image => "\uE8B9",
+            MaterialKind.Link => "\uE71B",
+            MaterialKind.Text => "\uE8A5",
+            _ => "\uE7C3",
+        };
+
+    public bool IsEditing
+    {
+        get => _isEditing;
+        private set
+        {
+            if (_isEditing == value)
+            {
+                return;
+            }
+
+            _isEditing = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(NameVisibility));
+            OnPropertyChanged(nameof(EditVisibility));
+        }
+    }
+
+    public string EditText
+    {
+        get => _editText;
+        set
+        {
+            if (_editText == value)
+            {
+                return;
+            }
+
+            _editText = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public Visibility NameVisibility => _isEditing ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility EditVisibility => _isEditing ? Visibility.Visible : Visibility.Collapsed;
+
+    public void BeginEdit()
+    {
+        EditText = IsFolder ? Name : Path.GetFileNameWithoutExtension(Name);
+        IsEditing = true;
+    }
+
+    public void EndEdit() => IsEditing = false;
+
+    public override string ToString() => Name;
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 0 => string.Empty,
+        < 1024 => $"{bytes} Б",
+        < 1024 * 1024 => string.Format(CultureInfo.GetCultureInfo("ru-RU"), "{0:0.#} КБ", bytes / 1024d),
+        < 1024L * 1024 * 1024 => string.Format(CultureInfo.GetCultureInfo("ru-RU"), "{0:0.#} МБ", bytes / (1024d * 1024)),
+        _ => string.Format(CultureInfo.GetCultureInfo("ru-RU"), "{0:0.#} ГБ", bytes / (1024d * 1024 * 1024)),
+    };
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+/// <summary>One breadcrumb segment: a label and the folder it opens.</summary>
+public sealed record FolderCrumb(string Label, string RelativePath)
+{
+    public override string ToString() => Label;
+}

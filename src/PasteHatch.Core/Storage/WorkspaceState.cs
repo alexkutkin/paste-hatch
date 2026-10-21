@@ -3,7 +3,11 @@ namespace PasteHatch.Core;
 /// <summary>Content of the tab-state JSON file in <c>%LOCALAPPDATA%\PasteHatch\state.json</c>.</summary>
 public sealed class WorkspaceState
 {
-    public const int CurrentVersion = 2;
+    /// <summary>
+    /// Version 3 replaced the flat <c>materialOrder</c> list with a per-tab selected folder.
+    /// Version 2 files still load: the order is ignored, the files themselves are untouched.
+    /// </summary>
+    public const int CurrentVersion = 3;
 
     public int Version { get; set; } = CurrentVersion;
 
@@ -24,10 +28,18 @@ public sealed class TabState
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// User's order of material file names inside this basket. Files on disk remain the source of
-    /// truth: names that no longer exist are ignored, new files are appended after known ones.
+    /// Folder currently open in this basket, relative to the basket root. An empty string is the
+    /// basket root. The folder is re-validated on start, so a folder deleted outside the app falls
+    /// back to the root instead of hiding the basket.
     /// </summary>
-    public List<string> MaterialOrder { get; set; } = [];
+    public string SelectedFolder { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Legacy version-2 field. Kept only so old state files deserialize without errors; the
+    /// manual material order is no longer used and is never written.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? MaterialOrder { get; set; }
 }
 
 /// <summary>Last floating-window rectangle in physical pixels, restored on the next launch.</summary>
