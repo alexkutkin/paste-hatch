@@ -1,6 +1,5 @@
 # Creates (or removes) a desktop shortcut to the built PasteHatch executable.
-# The shortcut points at the framework-dependent Release build, so .NET 9 Desktop Runtime
-# must be installed on the machine (the SDK already includes it).
+# The shortcut points at the Release build (self-contained Windows App SDK, .NET 10 runtime).
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1
@@ -17,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $runtime = if ($Platform -eq 'x64') { 'win-x64' } else { 'win-arm64' }
-$exe = Join-Path $root "src\PasteHatch.App\bin\$Platform\$Configuration\net9.0-windows10.0.19041.0\$runtime\PasteHatch.exe"
+$exe = Join-Path $root "src\PasteHatch.App\bin\$Platform\$Configuration\net10.0-windows10.0.19041.0\$runtime\PasteHatch.exe"
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shortcutPath = Join-Path $desktop 'PasteHatch.lnk'
 

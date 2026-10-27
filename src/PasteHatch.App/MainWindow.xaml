@@ -55,32 +55,32 @@
                 x:Name="PasteButton"
                 Click="OnPasteClick"
                 Icon="Paste"
-                Label="Вставить"
-                ToolTipService.ToolTip="Вставить из буфера обмена (Ctrl+V)" />
+                Label="{Binding [Command_Paste], Source={StaticResource Loc}}"
+                ToolTipService.ToolTip="{Binding [ToolTip_Paste], Source={StaticResource Loc}}" />
             <AppBarButton
                 x:Name="NewFolderButton"
                 Click="OnNewFolderClick"
                 Icon="Add"
-                Label="Новая папка"
-                ToolTipService.ToolTip="Создать папку (Ctrl+Shift+N)" />
+                Label="{Binding [Command_NewFolder], Source={StaticResource Loc}}"
+                ToolTipService.ToolTip="{Binding [ToolTip_NewFolder], Source={StaticResource Loc}}" />
             <AppBarButton
                 x:Name="OpenFolderButton"
                 Click="OnOpenFolderClick"
                 Icon="Folder"
-                Label="Открыть папку"
-                ToolTipService.ToolTip="Открыть текущую папку в Проводнике" />
+                Label="{Binding [Command_OpenFolder], Source={StaticResource Loc}}"
+                ToolTipService.ToolTip="{Binding [ToolTip_OpenFolder], Source={StaticResource Loc}}" />
             <AppBarButton
                 x:Name="CopyPathButton"
                 Click="OnCopyPathClick"
                 Icon="Copy"
-                Label="Скопировать путь"
-                ToolTipService.ToolTip="Скопировать путь к текущей папке" />
+                Label="{Binding [Command_CopyPath], Source={StaticResource Loc}}"
+                ToolTipService.ToolTip="{Binding [ToolTip_CopyPath], Source={StaticResource Loc}}" />
             <CommandBar.SecondaryCommands>
                 <AppBarButton
                     x:Name="SettingsButton"
                     Click="OnSettingsClick"
                     Icon="Setting"
-                    Label="Настройки" />
+                    Label="{Binding [Command_Settings], Source={StaticResource Loc}}" />
             </CommandBar.SecondaryCommands>
         </CommandBar>
 
@@ -107,13 +107,13 @@
                     <TextBlock
                         VerticalAlignment="Center"
                         Style="{StaticResource SubtitleTextBlockStyle}"
-                        Text="Корзины" />
+                        Text="{Binding [Header_Baskets], Source={StaticResource Loc}}" />
                     <Button
                         x:Name="AddBasketButton"
                         Grid.Column="1"
-                        AutomationProperties.Name="Создать корзину"
+                        AutomationProperties.Name="{Binding [Action_CreateBasket], Source={StaticResource Loc}}"
                         Click="OnAddBasketClick"
-                        ToolTipService.ToolTip="Создать корзину (Ctrl+T)">
+                        ToolTipService.ToolTip="{Binding [ToolTip_CreateBasket], Source={StaticResource Loc}}">
                         <FontIcon FontSize="14" Glyph="&#xE710;" />
                     </Button>
                 </Grid>
@@ -123,7 +123,7 @@
                     Grid.Row="1"
                     Padding="0,0,0,8"
                     AllowDrop="True"
-                    AutomationProperties.Name="Корзины"
+                    AutomationProperties.Name="{Binding [Header_Baskets], Source={StaticResource Loc}}"
                     CanDragItems="True"
                     CanReorderItems="True"
                     DragItemsCompleted="OnBasketDragItemsCompleted"
@@ -170,9 +170,9 @@
                                 <Button
                                     Grid.Column="1"
                                     Padding="6"
-                                    AutomationProperties.Name="Удалить корзину"
+                                    AutomationProperties.Name="{Binding [Action_DeleteBasket], Source={StaticResource Loc}}"
                                     Click="OnCloseBasketClick"
-                                    ToolTipService.ToolTip="Удалить корзину"
+                                    ToolTipService.ToolTip="{Binding [Action_DeleteBasket], Source={StaticResource Loc}}"
                                     Visibility="{Binding CloseVisibility}">
                                     <FontIcon FontSize="12" Glyph="&#xE711;" />
                                 </Button>
@@ -215,16 +215,16 @@
                     <Button
                         x:Name="UpButton"
                         Padding="8,4"
-                        AutomationProperties.Name="На уровень выше"
+                        AutomationProperties.Name="{Binding [Action_Up], Source={StaticResource Loc}}"
                         Click="OnUpClick"
-                        ToolTipService.ToolTip="На уровень выше (Alt+↑)"
+                        ToolTipService.ToolTip="{Binding [ToolTip_Up], Source={StaticResource Loc}}"
                         VerticalAlignment="Stretch">
                         <FontIcon FontSize="14" Glyph="&#xE74A;" />
                     </Button>
                     <BreadcrumbBar
                         x:Name="FolderBreadcrumb"
                         Grid.Column="1"
-                        AutomationProperties.Name="Текущая папка"
+                        AutomationProperties.Name="{Binding [Label_CurrentFolder], Source={StaticResource Loc}}"
                         ItemClicked="OnBreadcrumbItemClicked"
                         VerticalAlignment="Center" />
                 </Grid>
@@ -233,7 +233,7 @@
                     <TreeView
                         x:Name="FileTree"
                         AllowDrop="True"
-                        AutomationProperties.Name="Файлы корзины"
+                        AutomationProperties.Name="{Binding [Label_BasketFiles], Source={StaticResource Loc}}"
                         CanDragItems="True"
                         DragItemsCompleted="OnTreeDragItemsCompleted"
                         DragItemsStarting="OnTreeDragItemsStarting"
@@ -300,16 +300,16 @@
                                                 Style="{StaticResource CaptionTextBlockStyle}"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                 Text="{Binding Content.Extension}"
-                                                ToolTipService.ToolTip="Расширение не меняется"
+                                                ToolTipService.ToolTip="{Binding [ToolTip_ExtensionFixed], Source={StaticResource Loc}}"
                                                 VerticalAlignment="Center" />
                                             <Button
-                                                AutomationProperties.Name="Сохранить имя"
+                                                AutomationProperties.Name="{Binding [Action_SaveName], Source={StaticResource Loc}}"
                                                 Click="OnNodeRenameSaveClick"
                                                 Content="OK" />
                                             <Button
-                                                AutomationProperties.Name="Отменить переименование"
+                                                AutomationProperties.Name="{Binding [Action_CancelRename], Source={StaticResource Loc}}"
                                                 Click="OnNodeRenameCancelClick"
-                                                Content="Отмена" />
+                                                Content="{Binding [Action_Cancel], Source={StaticResource Loc}}" />
                                         </StackPanel>
                                     </Grid>
                                     <StackPanel
@@ -323,8 +323,8 @@
                                         <Button
                                             x:Name="EntryOpenButton"
                                             Width="32" Height="32" Padding="0"
-                                            AutomationProperties.Name="Открыть"
-                                            ToolTipService.ToolTip="Открыть файл или папку"
+                                            AutomationProperties.Name="{Binding [Action_Open], Source={StaticResource Loc}}"
+                                            ToolTipService.ToolTip="{Binding [ToolTip_OpenEntry], Source={StaticResource Loc}}"
                                             Click="OnOpenEntryClick"
                                             DoubleTapped="OnEntryActionDoubleTapped"
                                             GotFocus="OnEntryActionGotFocus"
@@ -334,8 +334,8 @@
                                         <Button
                                             x:Name="EntryCopyPathButton"
                                             Width="32" Height="32" Padding="0"
-                                            AutomationProperties.Name="Скопировать путь"
-                                            ToolTipService.ToolTip="Скопировать путь к файлу или папке"
+                                            AutomationProperties.Name="{Binding [Command_CopyPath], Source={StaticResource Loc}}"
+                                            ToolTipService.ToolTip="{Binding [ToolTip_CopyEntryPath], Source={StaticResource Loc}}"
                                             Click="OnCopyEntryPathClick"
                                             DoubleTapped="OnEntryActionDoubleTapped"
                                             GotFocus="OnEntryActionGotFocus"
@@ -362,15 +362,15 @@
                         <TextBlock
                             HorizontalAlignment="Center"
                             Style="{StaticResource SubtitleTextBlockStyle}"
-                            Text="Корзина пуста" />
+                            Text="{Binding [State_EmptyBasket], Source={StaticResource Loc}}" />
                         <TextBlock
                             HorizontalAlignment="Center"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="Нажмите Ctrl+V или перетащите файлы и папки в окно" />
+                            Text="{Binding [State_EmptyHint], Source={StaticResource Loc}}" />
                         <Button
                             Margin="0,8,0,0"
                             Click="OnPasteClick"
-                            Content="Вставить из буфера"
+                            Content="{Binding [Action_PasteFromClipboard], Source={StaticResource Loc}}"
                             HorizontalAlignment="Center" />
                     </StackPanel>
                 </Grid>
@@ -422,7 +422,7 @@
                         <TextBox
                             x:Name="PreviewText"
                             AcceptsReturn="True"
-                            AutomationProperties.Name="Предпросмотр текста"
+                            AutomationProperties.Name="{Binding [Label_TextPreview], Source={StaticResource Loc}}"
                             Background="Transparent"
                             BorderThickness="0"
                             IsReadOnly="True"
@@ -435,7 +435,7 @@
                         <TextBlock
                             x:Name="PreviewPlaceholder"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="Выберите файл, чтобы увидеть его содержимое."
+                            Text="{Binding [Preview_Placeholder], Source={StaticResource Loc}}"
                             TextWrapping="Wrap" />
                     </Grid>
                 </Grid>
@@ -454,10 +454,10 @@
             <TextBox
                 x:Name="QuickNoteTextBox"
                 Grid.Column="0"
-                AutomationProperties.Name="Быстрая заметка"
-                Header="Быстрая заметка"
+                AutomationProperties.Name="{Binding [Label_QuickNote], Source={StaticResource Loc}}"
+                Header="{Binding [Label_QuickNote], Source={StaticResource Loc}}"
                 KeyDown="OnQuickNoteKeyDown"
-                PlaceholderText="Введите текст и нажмите Enter" />
+                PlaceholderText="{Binding [Placeholder_QuickNote], Source={StaticResource Loc}}" />
 
             <Button
                 x:Name="QuickNoteSaveButton"
@@ -465,8 +465,8 @@
                 Padding="16,6"
                 VerticalAlignment="Bottom"
                 Click="OnSaveNoteClick"
-                Content="Добавить"
-                ToolTipService.ToolTip="Сохранить заметку (Enter)" />
+                Content="{Binding [Action_Add], Source={StaticResource Loc}}"
+                ToolTipService.ToolTip="{Binding [ToolTip_SaveNote], Source={StaticResource Loc}}" />
         </Grid>
 
         <InfoBar
@@ -508,8 +508,7 @@
                     Grid.Column="2"
                     Style="{StaticResource CaptionTextBlockStyle}"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    VerticalAlignment="Center"
-                    Text="0 элементов" />
+                    VerticalAlignment="Center" />
             </Grid>
         </Border>
     </Grid>

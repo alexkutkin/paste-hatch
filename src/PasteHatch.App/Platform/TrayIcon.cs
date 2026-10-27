@@ -6,14 +6,17 @@ namespace PasteHatch.Platform;
 
 /// <summary>
 /// Windows notification-area icon with standard tray behaviour: a left click shows or hides the
-/// main window, right click opens the standard WinForms context menu ("Показать окно" as the
-/// bold default, then "Настройки" and "Выход"), and double-click shows the window.
+/// main window, right click opens the standard WinForms context menu (the show command is the
+/// bold default, then settings and exit), and double-click shows the window.
 /// Must be created and disposed on the UI (STA) thread.
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _contextMenu;
+    private readonly ToolStripMenuItem _showItem;
+    private readonly ToolStripMenuItem _settingsItem;
+    private readonly ToolStripMenuItem _exitItem;
     private readonly Icon _icon;
     private readonly Font _boldFont;
     private bool _disposed;
@@ -31,20 +34,20 @@ public sealed class TrayIcon : IDisposable
             ? new Font(FontFamily.GenericSansSerif, 9f, FontStyle.Bold)
             : new Font(menuFont, FontStyle.Bold);
 
-        var showItem = new ToolStripMenuItem("Показать окно") { Font = _boldFont };
-        showItem.Click += (_, _) => onShowWindow();
+        _showItem = new ToolStripMenuItem { Font = _boldFont };
+        _showItem.Click += (_, _) => onShowWindow();
 
-        var settingsItem = new ToolStripMenuItem("Настройки");
-        settingsItem.Click += (_, _) => onOpenSettings();
+        _settingsItem = new ToolStripMenuItem();
+        _settingsItem.Click += (_, _) => onOpenSettings();
 
-        var exitItem = new ToolStripMenuItem("Выход");
-        exitItem.Click += (_, _) => onExit();
+        _exitItem = new ToolStripMenuItem();
+        _exitItem.Click += (_, _) => onExit();
 
         _contextMenu = new ContextMenuStrip();
-        _contextMenu.Items.Add(showItem);
-        _contextMenu.Items.Add(settingsItem);
+        _contextMenu.Items.Add(_showItem);
+        _contextMenu.Items.Add(_settingsItem);
         _contextMenu.Items.Add(new ToolStripSeparator());
-        _contextMenu.Items.Add(exitItem);
+        _contextMenu.Items.Add(_exitItem);
 
         _notifyIcon = new NotifyIcon
         {
@@ -54,6 +57,8 @@ public sealed class TrayIcon : IDisposable
             Visible = true,
         };
 
+        RefreshTexts();
+
         // Single left click is the tray-app convention for showing/hiding the window.
         _notifyIcon.MouseClick += (_, e) =>
         {
@@ -62,6 +67,14 @@ public sealed class TrayIcon : IDisposable
                 onToggleWindow();
             }
         };
+    }
+
+    /// <summary>Re-reads the menu labels after the UI language changed.</summary>
+    public void RefreshTexts()
+    {
+        _showItem.Text = Localization.Text.Get("Tray_ShowWindow");
+        _settingsItem.Text = Localization.Text.Get("Command_Settings");
+        _exitItem.Text = Localization.Text.Get("Tray_Exit");
     }
 
     /// <inheritdoc />

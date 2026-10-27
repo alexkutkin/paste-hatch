@@ -29,16 +29,4 @@ public sealed class MaterialClassifierTests
     {
         Assert.Equal(MaterialKind.File, MaterialClassifier.Classify("just-a-name"));
     }
-
-    [Theory]
-    [InlineData(MaterialKind.Image, "Изображение")]
-    [InlineData(MaterialKind.Text, "Текст")]
-    [InlineData(MaterialKind.Link, "Ссылка")]
-    [InlineData(MaterialKind.File, "Файл")]
-    public void Material_TypeLabel_IsRussianLabelForKind(MaterialKind kind, string expectedLabel)
-    {
-        var material = new Material("file.bin", @"C:\basket\file.bin", kind);
-
-        Assert.Equal(expectedLabel, material.TypeLabel);
-    }
 }

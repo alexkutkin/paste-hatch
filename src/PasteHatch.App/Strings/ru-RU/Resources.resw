@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <!-- Core: naming -->
+  <data name="Name_DefaultMaterial" xml:space="preserve"><value>Материал</value></data>
+  <data name="Error_UniqueFileName" xml:space="preserve"><value>Не удалось подобрать свободное имя файла для «{0}».</value></data>
+  <data name="Error_FileNameEmpty" xml:space="preserve"><value>Имя файла не может быть пустым.</value></data>
+  <data name="Error_FolderNameEmpty" xml:space="preserve"><value>Имя папки не может быть пустым.</value></data>
+  <data name="Error_FileNameTrailing" xml:space="preserve"><value>Имя файла не может заканчиваться точкой или пробелом.</value></data>
+  <data name="Error_FolderNameTrailing" xml:space="preserve"><value>Имя папки не может заканчиваться точкой или пробелом.</value></data>
+  <data name="Error_FileNameTooLong" xml:space="preserve"><value>Имя файла не должно превышать {0} символов.</value></data>
+  <data name="Error_FolderNameTooLong" xml:space="preserve"><value>Имя папки не должно превышать {0} символов.</value></data>
+  <data name="Error_FileNameInvalidChars" xml:space="preserve"><value>Имя файла содержит недопустимые символы: \ / : * ? " &lt; &gt; |.</value></data>
+  <data name="Error_FolderNameInvalidChars" xml:space="preserve"><value>Имя папки содержит недопустимые символы: \ / : * ? " &lt; &gt; |.</value></data>
+  <data name="Error_NameReserved" xml:space="preserve"><value>«{0}» — служебное имя Windows, его нельзя использовать.</value></data>
+  <data name="Error_FileNameTotalTooLong" xml:space="preserve"><value>Слишком длинное имя файла.</value></data>
+  <data name="Error_FolderNameTotalTooLong" xml:space="preserve"><value>Слишком длинное имя папки.</value></data>
+
+  <!-- Core: baskets, folders and materials -->
+  <data name="Status_BasketLimit" xml:space="preserve"><value>Достигнут предел в 10 корзин.</value></data>
+  <data name="Error_CreateBasket" xml:space="preserve"><value>Не удалось создать корзину: {0}</value></data>
+  <data name="Status_LastBasket" xml:space="preserve"><value>Нельзя закрыть последнюю корзину.</value></data>
+  <data name="Error_RecycleBasket" xml:space="preserve"><value>Не удалось отправить корзину в Корзину Windows: {0}</value></data>
+  <data name="Status_BasketRecycled" xml:space="preserve"><value>Корзина «{0}» отправлена в Корзину Windows.</value></data>
+  <data name="Error_Navigate" xml:space="preserve"><value>Не удалось перейти в папку.</value></data>
+  <data name="Error_FolderNotFoundMoved" xml:space="preserve"><value>Папка не найдена — возможно, она была перемещена извне.</value></data>
+  <data name="Error_ReadClipboard" xml:space="preserve"><value>Не удалось прочитать буфер обмена: {0}</value></data>
+  <data name="Status_UnsupportedClipboard" xml:space="preserve"><value>В буфере обмена нет поддерживаемых данных.</value></data>
+  <data name="Status_NoFilesToAdd" xml:space="preserve"><value>Нет файлов для добавления.</value></data>
+  <data name="Error_SaveNote" xml:space="preserve"><value>Не удалось сохранить заметку: {0}</value></data>
+  <data name="Error_InvalidFolderName" xml:space="preserve"><value>Недопустимое имя папки.</value></data>
+  <data name="Error_FolderExists" xml:space="preserve"><value>Папка «{0}» уже существует.</value></data>
+  <data name="Status_FolderCreated" xml:space="preserve"><value>Папка «{0}» создана.</value></data>
+  <data name="Error_CreateFolder" xml:space="preserve"><value>Не удалось создать папку: {0}</value></data>
+  <data name="Error_FolderNotFoundMovedNamed" xml:space="preserve"><value>Папка «{0}» не найдена — возможно, она была перемещена извне.</value></data>
+  <data name="Error_RenameFolder" xml:space="preserve"><value>Не удалось переименовать папку: {0}</value></data>
+  <data name="Status_FolderRenamed" xml:space="preserve"><value>Папка «{0}» переименована в «{1}».</value></data>
+  <data name="Error_FolderNotFound" xml:space="preserve"><value>Папка «{0}» не найдена.</value></data>
+  <data name="Error_RecycleFolder" xml:space="preserve"><value>Не удалось отправить папку в Корзину Windows: {0}</value></data>
+  <data name="Status_FolderRecycled" xml:space="preserve"><value>Папка «{0}» отправлена в Корзину Windows.</value></data>
+  <data name="Error_InvalidFileName" xml:space="preserve"><value>Недопустимое имя файла.</value></data>
+  <data name="Error_FileNotFoundMoved" xml:space="preserve"><value>Файл «{0}» не найден — возможно, он был перемещён извне.</value></data>
+  <data name="Error_FileExists" xml:space="preserve"><value>Файл или папка «{0}» уже существует в этой корзине.</value></data>
+  <data name="Error_RenameFile" xml:space="preserve"><value>Не удалось переименовать файл: {0}</value></data>
+  <data name="Status_FileRenamed" xml:space="preserve"><value>Файл «{0}» переименован в «{1}».</value></data>
+  <data name="Error_RecycleFile" xml:space="preserve"><value>Не удалось отправить файл в Корзину Windows: {0}</value></data>
+  <data name="Status_FileRecycled" xml:space="preserve"><value>Файл «{0}» отправлен в Корзину Windows.</value></data>
+  <data name="Error_FileNotFound" xml:space="preserve"><value>Файл «{0}» не найден.</value></data>
+  <data name="Error_OpenFile" xml:space="preserve"><value>Не удалось открыть файл: {0}</value></data>
+  <data name="Error_OpenFolder" xml:space="preserve"><value>Не удалось открыть папку: {0}</value></data>
+  <data name="Error_OpenBasketFolder" xml:space="preserve"><value>Не удалось открыть папку корзины: {0}</value></data>
+  <data name="Status_FolderPathCopied" xml:space="preserve"><value>Путь к папке скопирован в буфер обмена.</value></data>
+  <data name="Status_FilePathCopied" xml:space="preserve"><value>Путь к файлу скопирован в буфер обмена.</value></data>
+  <data name="Error_CopyPath" xml:space="preserve"><value>Не удалось скопировать путь: {0}</value></data>
+  <data name="Status_NoFilesToMove" xml:space="preserve"><value>Нет файлов для перемещения.</value></data>
+  <data name="Error_GenerateUid" xml:space="preserve"><value>Не удалось подобрать свободный UID для корзины.</value></data>
+  <data name="Status_EntryCut" xml:space="preserve"><value>«{0}» вырезан в буфер обмена.</value></data>
+  <data name="Status_EntryCopied" xml:space="preserve"><value>«{0}» скопирован в буфер обмена.</value></data>
+  <data name="Error_CopyToClipboard" xml:space="preserve"><value>Не удалось скопировать в буфер обмена: {0}</value></data>
+  <data name="Status_NoImage" xml:space="preserve"><value>В буфере обмена нет изображения.</value></data>
+  <data name="Status_ScreenshotAdded" xml:space="preserve"><value>Добавлен скриншот «{0}».</value></data>
+  <data name="Error_SaveImage" xml:space="preserve"><value>Не удалось сохранить изображение: {0}</value></data>
+  <data name="Status_NoText" xml:space="preserve"><value>В буфере обмена нет текста.</value></data>
+  <data name="Status_LinkAdded" xml:space="preserve"><value>Добавлена ссылка «{0}».</value></data>
+  <data name="Status_TextAdded" xml:space="preserve"><value>Текст добавлен.</value></data>
+  <data name="Error_SaveText" xml:space="preserve"><value>Не удалось сохранить текст: {0}</value></data>
+  <data name="Error_SaveTabState" xml:space="preserve"><value>Не удалось сохранить состояние вкладок: {0}</value></data>
+  <data name="Error_InvalidFolderPath" xml:space="preserve"><value>Недопустимый путь папки.</value></data>
+  <data name="Error_WatchFolder" xml:space="preserve"><value>Не удалось включить наблюдение за папкой: {0}</value></data>
+
+  <!-- Core: file transfer -->
+  <data name="Error_FileNotFoundPath" xml:space="preserve"><value>Файл не найден: {0}</value></data>
+  <data name="Error_LinkNotCopied" xml:space="preserve"><value>Ссылки на папки не копируются и не перемещаются.</value></data>
+  <data name="Error_FolderIntoItself" xml:space="preserve"><value>Нельзя скопировать или переместить папку внутрь себя.</value></data>
+  <data name="Error_DriveRoot" xml:space="preserve"><value>Нельзя переносить корень диска.</value></data>
+  <data name="Folder_Root" xml:space="preserve"><value>корень корзины</value></data>
+  <data name="Status_NothingMoved" xml:space="preserve"><value>Элементы не перемещены.</value></data>
+  <data name="Status_OneItemMoved" xml:space="preserve"><value>1 элемент перемещён в «{0}».</value></data>
+  <data name="Status_ItemsMoved" xml:space="preserve"><value>Перемещено {0} в «{1}».</value></data>
+  <data name="Status_NothingCopied" xml:space="preserve"><value>Элементы не скопированы.</value></data>
+  <data name="Status_ItemsCopied" xml:space="preserve"><value>Скопировано {0} в «{1}».</value></data>
+  <data name="Status_Added" xml:space="preserve"><value>Добавлено {0}.</value></data>
+  <data name="Status_AddedPartly" xml:space="preserve"><value>Добавлено {0} (часть файлов уже была в корзине).</value></data>
+  <data name="Status_AlreadyInBasket" xml:space="preserve"><value>Файлы уже находятся в этой корзине.</value></data>
+  <data name="Status_NothingAdded" xml:space="preserve"><value>Материалы не добавлены.</value></data>
+  <data name="Status_OneFileAdded" xml:space="preserve"><value>Добавлен 1 файл.</value></data>
+  <data name="Status_OneFileAddedPartly" xml:space="preserve"><value>Добавлен 1 файл (часть файлов уже была в корзине).</value></data>
+  <data name="Error_UniqueFolderName" xml:space="preserve"><value>Не удалось подобрать свободное имя папки для «{0}».</value></data>
+  <data name="Count_Items.One" xml:space="preserve"><value>{0} элемент</value></data>
+  <data name="Count_Items.Few" xml:space="preserve"><value>{0} элемента</value></data>
+  <data name="Count_Items.Many" xml:space="preserve"><value>{0} элементов</value></data>
+  <data name="Count_Files.One" xml:space="preserve"><value>{0} файл</value></data>
+  <data name="Count_Files.Few" xml:space="preserve"><value>{0} файла</value></data>
+  <data name="Count_Files.Many" xml:space="preserve"><value>{0} файлов</value></data>
+
+  <!-- Main window -->
+  <data name="Command_Paste" xml:space="preserve"><value>Вставить</value></data>
+  <data name="ToolTip_Paste" xml:space="preserve"><value>Вставить из буфера обмена (Ctrl+V)</value></data>
+  <data name="Command_NewFolder" xml:space="preserve"><value>Новая папка</value></data>
+  <data name="ToolTip_NewFolder" xml:space="preserve"><value>Создать папку (Ctrl+Shift+N)</value></data>
+  <data name="Command_OpenFolder" xml:space="preserve"><value>Открыть папку</value></data>
+  <data name="ToolTip_OpenFolder" xml:space="preserve"><value>Открыть текущую папку в Проводнике</value></data>
+  <data name="Command_CopyPath" xml:space="preserve"><value>Скопировать путь</value></data>
+  <data name="ToolTip_CopyPath" xml:space="preserve"><value>Скопировать путь к текущей папке</value></data>
+  <data name="Command_Settings" xml:space="preserve"><value>Настройки</value></data>
+  <data name="Header_Baskets" xml:space="preserve"><value>Корзины</value></data>
+  <data name="Action_CreateBasket" xml:space="preserve"><value>Создать корзину</value></data>
+  <data name="ToolTip_CreateBasket" xml:space="preserve"><value>Создать корзину (Ctrl+T)</value></data>
+  <data name="Action_DeleteBasket" xml:space="preserve"><value>Удалить корзину</value></data>
+  <data name="Action_Up" xml:space="preserve"><value>На уровень выше</value></data>
+  <data name="ToolTip_Up" xml:space="preserve"><value>На уровень выше (Alt+↑)</value></data>
+  <data name="Label_CurrentFolder" xml:space="preserve"><value>Текущая папка</value></data>
+  <data name="Label_BasketFiles" xml:space="preserve"><value>Файлы корзины</value></data>
+  <data name="ToolTip_ExtensionFixed" xml:space="preserve"><value>Расширение не меняется</value></data>
+  <data name="Action_SaveName" xml:space="preserve"><value>Сохранить имя</value></data>
+  <data name="Action_Cancel" xml:space="preserve"><value>Отмена</value></data>
+  <data name="Action_CancelRename" xml:space="preserve"><value>Отменить переименование</value></data>
+  <data name="Action_Open" xml:space="preserve"><value>Открыть</value></data>
+  <data name="ToolTip_OpenEntry" xml:space="preserve"><value>Открыть файл или папку</value></data>
+  <data name="ToolTip_CopyEntryPath" xml:space="preserve"><value>Скопировать путь к файлу или папке</value></data>
+  <data name="State_EmptyBasket" xml:space="preserve"><value>Корзина пуста</value></data>
+  <data name="State_EmptyHint" xml:space="preserve"><value>Нажмите Ctrl+V или перетащите файлы и папки в окно</value></data>
+  <data name="Action_PasteFromClipboard" xml:space="preserve"><value>Вставить из буфера</value></data>
+  <data name="Label_TextPreview" xml:space="preserve"><value>Предпросмотр текста</value></data>
+  <data name="Preview_Placeholder" xml:space="preserve"><value>Выберите файл, чтобы увидеть его содержимое.</value></data>
+  <data name="Label_QuickNote" xml:space="preserve"><value>Быстрая заметка</value></data>
+  <data name="Placeholder_QuickNote" xml:space="preserve"><value>Введите текст и нажмите Enter</value></data>
+  <data name="Action_Add" xml:space="preserve"><value>Добавить</value></data>
+  <data name="ToolTip_SaveNote" xml:space="preserve"><value>Сохранить заметку (Enter)</value></data>
+
+  <!-- Main window: code-built text -->
+  <data name="Error_StartupInit" xml:space="preserve"><value>Не удалось инициализировать хранилище корзин: {0}</value></data>
+  <data name="Error_Unexpected" xml:space="preserve"><value>Непредвиденная ошибка: {0}</value></data>
+  <data name="Menu_OpenInExplorerBasket" xml:space="preserve"><value>Открыть папку в Проводнике</value></data>
+  <data name="Menu_Rename" xml:space="preserve"><value>Переименовать</value></data>
+  <data name="Menu_CloseBasket" xml:space="preserve"><value>Закрыть корзину…</value></data>
+  <data name="Menu_ExpandCollapse" xml:space="preserve"><value>Развернуть / свернуть</value></data>
+  <data name="Menu_Open" xml:space="preserve"><value>Открыть</value></data>
+  <data name="Menu_OpenInExplorer" xml:space="preserve"><value>Открыть в Проводнике</value></data>
+  <data name="Menu_Cut" xml:space="preserve"><value>Вырезать</value></data>
+  <data name="Menu_Copy" xml:space="preserve"><value>Копировать</value></data>
+  <data name="Menu_Delete" xml:space="preserve"><value>Удалить…</value></data>
+  <data name="Preview_FolderExpanded" xml:space="preserve"><value>Папка. Содержимое показано в дереве.</value></data>
+  <data name="Preview_FolderCollapsed" xml:space="preserve"><value>Папка. Разверните её в дереве, чтобы увидеть содержимое.</value></data>
+  <data name="Preview_ReadError" xml:space="preserve"><value>Не удалось прочитать файл: {0}</value></data>
+  <data name="Preview_Unsupported" xml:space="preserve"><value>Для этого типа файла предпросмотр не поддерживается.</value></data>
+  <data name="Preview_ImageError" xml:space="preserve"><value>Не удалось показать изображение: {0}</value></data>
+  <data name="Drag_MoveToFolder" xml:space="preserve"><value>Переместить в «{0}»</value></data>
+  <data name="Drag_CopyToFolder" xml:space="preserve"><value>Скопировать в «{0}»</value></data>
+  <data name="Drag_MoveToCurrent" xml:space="preserve"><value>Переместить в текущую папку</value></data>
+  <data name="Drag_CopyToBasket" xml:space="preserve"><value>Скопировать в корзину</value></data>
+  <data name="Error_DropFiles" xml:space="preserve"><value>Не удалось добавить перетащенные файлы: {0}</value></data>
+  <data name="Default_NewFolderName" xml:space="preserve"><value>Новая папка</value></data>
+
+  <!-- Material kinds and sizes -->
+  <data name="Kind_Folder" xml:space="preserve"><value>Папка</value></data>
+  <data name="Kind_Image" xml:space="preserve"><value>Изображение</value></data>
+  <data name="Kind_Text" xml:space="preserve"><value>Текст</value></data>
+  <data name="Kind_Link" xml:space="preserve"><value>Ссылка</value></data>
+  <data name="Kind_File" xml:space="preserve"><value>Файл</value></data>
+  <data name="Size_Bytes" xml:space="preserve"><value>{0} Б</value></data>
+  <data name="Size_KB" xml:space="preserve"><value>{0:0.#} КБ</value></data>
+  <data name="Size_MB" xml:space="preserve"><value>{0:0.#} МБ</value></data>
+  <data name="Size_GB" xml:space="preserve"><value>{0:0.#} ГБ</value></data>
+
+  <!-- Tray -->
+  <data name="Tray_ShowWindow" xml:space="preserve"><value>Показать окно</value></data>
+  <data name="Tray_Exit" xml:space="preserve"><value>Выход</value></data>
+
+  <!-- Confirmations and errors -->
+  <data name="Confirm_DeleteBasketHeading" xml:space="preserve"><value>Удалить корзину?</value></data>
+  <data name="Confirm_DeleteBasketText" xml:space="preserve"><value>Корзина «{0}» и все её файлы будут отправлены в Корзину Windows, откуда их можно восстановить.</value></data>
+  <data name="Confirm_DeleteFileHeading" xml:space="preserve"><value>Удалить файл?</value></data>
+  <data name="Confirm_DeleteFileText" xml:space="preserve"><value>Файл «{0}» будет отправлен в Корзину Windows.</value></data>
+  <data name="Confirm_DeleteFolderHeading" xml:space="preserve"><value>Удалить папку?</value></data>
+  <data name="Confirm_DeleteFolderText" xml:space="preserve"><value>Папка «{0}» и всё её содержимое будут отправлены в Корзину Windows.</value></data>
+  <data name="Error_Heading" xml:space="preserve"><value>Ошибка</value></data>
+  <data name="Button_Recycle" xml:space="preserve"><value>В Корзину Windows</value></data>
+  <data name="Expander_ShowPath" xml:space="preserve"><value>Показать путь</value></data>
+  <data name="Expander_HidePath" xml:space="preserve"><value>Скрыть путь</value></data>
+
+  <!-- Settings -->
+  <data name="Settings_Title" xml:space="preserve"><value>Настройки — PasteHatch</value></data>
+  <data name="Settings_General" xml:space="preserve"><value>Общие</value></data>
+  <data name="Settings_StartInTray" xml:space="preserve"><value>Запускать в трее</value></data>
+  <data name="Settings_StartInTrayDesc" xml:space="preserve"><value>При запуске окно не открывается: приложение работает в области уведомлений. Исключение — первый запуск.</value></data>
+  <data name="Settings_RememberPlacement" xml:space="preserve"><value>Запоминать положение окна</value></data>
+  <data name="Settings_RememberPlacementDesc" xml:space="preserve"><value>При следующем запуске окно откроется там же и такого же размера.</value></data>
+  <data name="Settings_AlwaysOnTop" xml:space="preserve"><value>Поверх других окон</value></data>
+  <data name="Settings_AlwaysOnTopDesc" xml:space="preserve"><value>Окно остаётся на переднем плане, пока вы работаете с другими приложениями.</value></data>
+  <data name="Settings_Language" xml:space="preserve"><value>Язык</value></data>
+  <data name="Settings_LanguageDesc" xml:space="preserve"><value>Язык интерфейса. Изменение применяется сразу.</value></data>
+  <data name="Settings_About" xml:space="preserve"><value>О приложении</value></data>
+  <data name="Settings_AboutDesc" xml:space="preserve"><value>Корзины контекста для локальных AI-агентов. Материалы хранятся в папках корзин в %LOCALAPPDATA%\PasteHatch.</value></data>
+  <data name="Settings_Version" xml:space="preserve"><value>Версия {0}</value></data>
+  <data name="Action_ResetSettings" xml:space="preserve"><value>Сбросить настройки</value></data>
+  <data name="Action_Done" xml:space="preserve"><value>Готово</value></data>
+</root>

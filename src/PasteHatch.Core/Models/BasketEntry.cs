@@ -11,8 +11,6 @@ public sealed record BasketEntry(
     bool IsFolder,
     MaterialKind Kind)
 {
-    public string TypeLabel => IsFolder ? "Папка" : MaterialKindLabels.For(Kind);
-
     public long Size { get; init; }
 
     public DateTimeOffset Modified { get; init; }

@@ -33,6 +33,7 @@ public sealed class BasketWorkspace
     private readonly IConfirmationService _confirmations;
     private readonly IClock _clock;
     private readonly TabNameFormatter _formatter;
+    private readonly ITextProvider _text;
     private readonly FileTransfer _transfers;
 
     private readonly List<BasketTab> _tabs = [];
@@ -50,16 +51,18 @@ public sealed class BasketWorkspace
         IShellService shell,
         IConfirmationService confirmations,
         IClock? clock = null,
-        TabNameFormatter? formatter = null)
+        TabNameFormatter? formatter = null,
+        ITextProvider? text = null)
     {
         _basketsRoot = basketsRoot;
         _stateStore = stateStore;
         _clipboard = clipboard;
         _shell = shell;
-        _transfers = new FileTransfer(shell);
+        _text = text ?? KeyTextProvider.Instance;
+        _transfers = new FileTransfer(shell, _text);
         _confirmations = confirmations;
         _clock = clock ?? SystemClock.Instance;
-        _formatter = formatter ?? TabNameFormatter.Default;
+        _formatter = formatter ?? new TabNameFormatter();
     }
 
     public event EventHandler<WorkspaceChange>? Changed;
@@ -244,7 +247,7 @@ public sealed class BasketWorkspace
     {
         if (_tabs.Count >= MaxTabs)
         {
-            SetStatus("Достигнут предел в 10 корзин.");
+            SetStatus(_text.Get("Status_BasketLimit"));
             RaiseChanged();
             return null;
         }
@@ -256,7 +259,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось создать корзину: {ex.Message}");
+            ReportError(_text.Format("Error_CreateBasket", ex.Message));
             return null;
         }
 
@@ -320,7 +323,7 @@ public sealed class BasketWorkspace
     {
         if (_tabs.Count <= 1)
         {
-            SetStatus("Нельзя закрыть последнюю корзину.");
+            SetStatus(_text.Get("Status_LastBasket"));
             RaiseChanged();
             return false;
         }
@@ -343,7 +346,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось отправить корзину в Корзину Windows: {ex.Message}");
+            ReportError(_text.Format("Error_RecycleBasket", ex.Message));
             return false;
         }
 
@@ -356,7 +359,7 @@ public sealed class BasketWorkspace
             SelectedFolder = _selectedFolders.TryGetValue(next.Uid, out var folder) ? folder : string.Empty;
         }
 
-        SetStatus($"Корзина «{tab.DisplayName}» отправлена в Корзину Windows.");
+        SetStatus(_text.Format("Status_BasketRecycled", tab.DisplayName));
         Commit();
         return true;
     }
@@ -438,7 +441,7 @@ public sealed class BasketWorkspace
         var normalized = NormalizeRelativePath(relativeFolder);
         if (normalized is null)
         {
-            SetStatus("Не удалось перейти в папку.");
+            SetStatus(_text.Get("Error_Navigate"));
             RaiseChanged();
             return false;
         }
@@ -451,7 +454,7 @@ public sealed class BasketWorkspace
         var path = normalized.Length == 0 ? tab.DirectoryPath : Path.Combine(tab.DirectoryPath, normalized);
         if (!Directory.Exists(path))
         {
-            SetStatus("Папка не найдена — возможно, она была перемещена извне.");
+            SetStatus(_text.Get("Error_FolderNotFoundMoved"));
             RaiseChanged();
             return false;
         }
@@ -530,7 +533,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось прочитать буфер обмена: {ex.Message}");
+            ReportError(_text.Format("Error_ReadClipboard", ex.Message));
             return 0;
         }
 
@@ -561,7 +564,7 @@ public sealed class BasketWorkspace
                 return AddText(payload.Text, targetDirectory.Path);
 
             default:
-                SetStatus("В буфере обмена нет поддерживаемых данных.");
+                SetStatus(_text.Get("Status_UnsupportedClipboard"));
                 RaiseChanged();
                 return 0;
         }
@@ -590,7 +593,7 @@ public sealed class BasketWorkspace
     {
         if (paths.Count == 0)
         {
-            SetStatus("Нет файлов для добавления.");
+            SetStatus(_text.Get("Status_NoFilesToAdd"));
             RaiseChanged();
             return 0;
         }
@@ -621,7 +624,8 @@ public sealed class BasketWorkspace
             var fileName = MaterialNaming.DefaultFileName(
                 directory,
                 _formatter.FormatAsFileName(_clock.Now),
-                ".txt");
+                ".txt",
+                _text);
             var fullPath = Path.Combine(directory, fileName);
             File.WriteAllText(fullPath, text, MaterialNaming.Utf8NoBom);
             Commit();
@@ -629,7 +633,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось сохранить заметку: {ex.Message}");
+            ReportError(_text.Format("Error_SaveNote", ex.Message));
             return null;
         }
     }
@@ -645,10 +649,10 @@ public sealed class BasketWorkspace
             return null;
         }
 
-        var cleaned = MaterialNaming.ValidateFolderName(name, out var error);
+        var cleaned = MaterialNaming.ValidateFolderName(name, _text, out var error);
         if (cleaned is null)
         {
-            ReportError(error ?? "Недопустимое имя папки.");
+            ReportError(error ?? _text.Get("Error_InvalidFolderName"));
             return null;
         }
 
@@ -656,16 +660,16 @@ public sealed class BasketWorkspace
         try
         {
             Directory.CreateDirectory(parent);
-            var freeName = ensureUnique ? FileTransfer.UniqueDirectoryName(parent, cleaned) : cleaned;
+            var freeName = ensureUnique ? FileTransfer.UniqueDirectoryName(parent, cleaned, _text) : cleaned;
             var fullPath = Path.Combine(parent, freeName);
             if (Directory.Exists(fullPath) || File.Exists(fullPath))
             {
-                ReportError($"Папка «{freeName}» уже существует.");
+                ReportError(_text.Format("Error_FolderExists", freeName));
                 return null;
             }
 
             Directory.CreateDirectory(fullPath);
-            SetStatus($"Папка «{freeName}» создана.");
+            SetStatus(_text.Format("Status_FolderCreated", freeName));
             Commit();
             return _entries.FirstOrDefault(entry =>
                 entry.IsFolder &&
@@ -673,7 +677,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось создать папку: {ex.Message}");
+            ReportError(_text.Format("Error_CreateFolder", ex.Message));
             return null;
         }
     }
@@ -686,10 +690,10 @@ public sealed class BasketWorkspace
             return false;
         }
 
-        var cleaned = MaterialNaming.ValidateFolderName(newBaseName, out var error);
+        var cleaned = MaterialNaming.ValidateFolderName(newBaseName, _text, out var error);
         if (cleaned is null)
         {
-            ReportError(error ?? "Недопустимое имя папки.");
+            ReportError(error ?? _text.Get("Error_InvalidFolderName"));
             return false;
         }
 
@@ -697,7 +701,7 @@ public sealed class BasketWorkspace
         var parent = Path.GetDirectoryName(sourcePath);
         if (parent is null || !Directory.Exists(sourcePath))
         {
-            ReportError($"Папка «{folder.Name}» не найдена — возможно, она была перемещена извне.");
+            ReportError(_text.Format("Error_FolderNotFoundMovedNamed", folder.Name));
             RefreshAndNotify();
             return false;
         }
@@ -711,7 +715,7 @@ public sealed class BasketWorkspace
         var caseOnlyRename = string.Equals(cleaned, folder.Name, StringComparison.OrdinalIgnoreCase);
         if (!caseOnlyRename && (Directory.Exists(targetPath) || File.Exists(targetPath)))
         {
-            ReportError($"Папка «{cleaned}» уже существует.");
+            ReportError(_text.Format("Error_FolderExists", cleaned));
             return false;
         }
 
@@ -730,11 +734,11 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось переименовать папку: {ex.Message}");
+            ReportError(_text.Format("Error_RenameFolder", ex.Message));
             return false;
         }
 
-        SetStatus($"Папка «{folder.Name}» переименована в «{cleaned}».");
+        SetStatus(_text.Format("Status_FolderRenamed", folder.Name, cleaned));
         Commit();
         return true;
     }
@@ -749,7 +753,7 @@ public sealed class BasketWorkspace
 
         if (!Directory.Exists(folder.FullPath))
         {
-            ReportError($"Папка «{folder.Name}» не найдена.");
+            ReportError(_text.Format("Error_FolderNotFound", folder.Name));
             RefreshAndNotify();
             return false;
         }
@@ -765,11 +769,11 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось отправить папку в Корзину Windows: {ex.Message}");
+            ReportError(_text.Format("Error_RecycleFolder", ex.Message));
             return false;
         }
 
-        SetStatus($"Папка «{folder.Name}» отправлена в Корзину Windows.");
+        SetStatus(_text.Format("Status_FolderRecycled", folder.Name));
         Commit();
         return true;
     }
@@ -785,10 +789,10 @@ public sealed class BasketWorkspace
         }
 
         var extension = Path.GetExtension(material.FileName);
-        var cleaned = MaterialNaming.ValidateRenameBase(newBaseName, extension, out var error);
+        var cleaned = MaterialNaming.ValidateRenameBase(newBaseName, extension, _text, out var error);
         if (cleaned is null)
         {
-            ReportError(error ?? "Недопустимое имя файла.");
+            ReportError(error ?? _text.Get("Error_InvalidFileName"));
             return false;
         }
 
@@ -802,7 +806,7 @@ public sealed class BasketWorkspace
         var parent = Path.GetDirectoryName(sourcePath);
         if (parent is null || !File.Exists(sourcePath))
         {
-            ReportError($"Файл «{material.FileName}» не найден — возможно, он был перемещён извне.");
+            ReportError(_text.Format("Error_FileNotFoundMoved", material.FileName));
             RefreshAndNotify();
             return false;
         }
@@ -814,7 +818,7 @@ public sealed class BasketWorkspace
         // fire for the same file renamed to a different case.
         if (!caseOnlyRename && (File.Exists(targetPath) || Directory.Exists(targetPath)))
         {
-            ReportError($"Файл или папка «{targetName}» уже существует в этой корзине.");
+            ReportError(_text.Format("Error_FileExists", targetName));
             return false;
         }
 
@@ -834,11 +838,11 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось переименовать файл: {ex.Message}");
+            ReportError(_text.Format("Error_RenameFile", ex.Message));
             return false;
         }
 
-        SetStatus($"Файл «{material.FileName}» переименован в «{targetName}».");
+        SetStatus(_text.Format("Status_FileRenamed", material.FileName, targetName));
         Commit();
         return true;
     }
@@ -865,11 +869,11 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось отправить файл в Корзину Windows: {ex.Message}");
+            ReportError(_text.Format("Error_RecycleFile", ex.Message));
             return false;
         }
 
-        SetStatus($"Файл «{material.FileName}» отправлен в Корзину Windows.");
+        SetStatus(_text.Format("Status_FileRecycled", material.FileName));
         Commit();
         return true;
     }
@@ -878,7 +882,7 @@ public sealed class BasketWorkspace
     {
         if (!File.Exists(material.FullPath))
         {
-            ReportError($"Файл «{material.FileName}» не найден.");
+            ReportError(_text.Format("Error_FileNotFound", material.FileName));
             RefreshAndNotify();
             return;
         }
@@ -889,7 +893,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось открыть файл: {ex.Message}");
+            ReportError(_text.Format("Error_OpenFile", ex.Message));
         }
     }
 
@@ -909,7 +913,7 @@ public sealed class BasketWorkspace
     {
         if (!Directory.Exists(folder.FullPath))
         {
-            ReportError($"Папка «{folder.Name}» не найдена.");
+            ReportError(_text.Format("Error_FolderNotFound", folder.Name));
             RefreshAndNotify();
             return;
         }
@@ -920,7 +924,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось открыть папку: {ex.Message}");
+            ReportError(_text.Format("Error_OpenFolder", ex.Message));
         }
     }
 
@@ -940,7 +944,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось открыть папку корзины: {ex.Message}");
+            ReportError(_text.Format("Error_OpenBasketFolder", ex.Message));
         }
     }
 
@@ -954,12 +958,12 @@ public sealed class BasketWorkspace
         try
         {
             _shell.CopyText(SelectedFolderPath);
-            SetStatus("Путь к папке скопирован в буфер обмена.");
+            SetStatus(_text.Get("Status_FolderPathCopied"));
             RaiseChanged();
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось скопировать путь: {ex.Message}");
+            ReportError(_text.Format("Error_CopyPath", ex.Message));
         }
     }
 
@@ -972,12 +976,12 @@ public sealed class BasketWorkspace
         try
         {
             _shell.CopyText(material.FullPath);
-            SetStatus("Путь к файлу скопирован в буфер обмена.");
+            SetStatus(_text.Get("Status_FilePathCopied"));
             RaiseChanged();
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось скопировать путь: {ex.Message}");
+            ReportError(_text.Format("Error_CopyPath", ex.Message));
         }
     }
 
@@ -987,14 +991,12 @@ public sealed class BasketWorkspace
         try
         {
             _shell.CopyText(entry.FullPath);
-            SetStatus(entry.IsFolder
-                ? "Путь к папке скопирован в буфер обмена."
-                : "Путь к файлу скопирован в буфер обмена.");
+            SetStatus(_text.Get(entry.IsFolder ? "Status_FolderPathCopied" : "Status_FilePathCopied"));
             RaiseChanged();
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось скопировать путь: {ex.Message}");
+            ReportError(_text.Format("Error_CopyPath", ex.Message));
         }
     }
 
@@ -1030,7 +1032,7 @@ public sealed class BasketWorkspace
     {
         if (paths.Count == 0)
         {
-            SetStatus("Нет файлов для перемещения.");
+            SetStatus(_text.Get("Status_NoFilesToMove"));
             RaiseChanged();
             return 0;
         }
@@ -1161,7 +1163,7 @@ public sealed class BasketWorkspace
             }
         }
 
-        throw new InvalidOperationException("Не удалось подобрать свободный UID для корзины.");
+        throw new InvalidOperationException(_text.Get("Error_GenerateUid"));
     }
 
     private int TransferFiles(IReadOnlyList<string> paths, TargetFolder target, FileTransferIntent intent)
@@ -1189,11 +1191,11 @@ public sealed class BasketWorkspace
             string[] paths = [entry.FullPath];
             _shell.CopyFilesToClipboard(paths, move);
             _transfers.RememberClipboard(paths, move);
-            ReportStatus($"«{entry.Name}» {(move ? "вырезан" : "скопирован")} в буфер обмена.");
+            ReportStatus(_text.Format(move ? "Status_EntryCut" : "Status_EntryCopied", entry.Name));
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось скопировать в буфер обмена: {ex.Message}");
+            ReportError(_text.Format("Error_CopyToClipboard", ex.Message));
         }
     }
 
@@ -1201,7 +1203,7 @@ public sealed class BasketWorkspace
     {
         if (pngBytes is not { Length: > 0 })
         {
-            SetStatus("В буфере обмена нет изображения.");
+            SetStatus(_text.Get("Status_NoImage"));
             RaiseChanged();
             return 0;
         }
@@ -1212,15 +1214,16 @@ public sealed class BasketWorkspace
             var fileName = MaterialNaming.DefaultFileName(
                 targetDirectory,
                 _formatter.FormatAsFileName(_clock.Now),
-                ".png");
+                ".png",
+                _text);
             File.WriteAllBytes(Path.Combine(targetDirectory, fileName), pngBytes);
-            SetStatus($"Добавлен скриншот «{fileName}».");
+            SetStatus(_text.Format("Status_ScreenshotAdded", fileName));
             Commit();
             return 1;
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось сохранить изображение: {ex.Message}");
+            ReportError(_text.Format("Error_SaveImage", ex.Message));
             return 0;
         }
     }
@@ -1229,7 +1232,7 @@ public sealed class BasketWorkspace
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            SetStatus("В буфере обмена нет текста.");
+            SetStatus(_text.Get("Status_NoText"));
             RaiseChanged();
             return 0;
         }
@@ -1243,12 +1246,13 @@ public sealed class BasketWorkspace
                 var urlFileName = MaterialNaming.DefaultFileName(
                     targetDirectory,
                     _formatter.FormatAsFileName(_clock.Now),
-                    ".url");
+                    ".url",
+                    _text);
                 File.WriteAllText(
                     Path.Combine(targetDirectory, urlFileName),
                     MaterialNaming.CreateInternetShortcutContent(link),
                     MaterialNaming.Utf8NoBom);
-                SetStatus($"Добавлена ссылка «{link.Host}».");
+                SetStatus(_text.Format("Status_LinkAdded", link.Host));
                 Commit();
                 return 1;
             }
@@ -1256,18 +1260,19 @@ public sealed class BasketWorkspace
             var textFileName = MaterialNaming.DefaultFileName(
                 targetDirectory,
                 _formatter.FormatAsFileName(_clock.Now),
-                ".txt");
+                ".txt",
+                _text);
             File.WriteAllText(
                 Path.Combine(targetDirectory, textFileName),
                 text,
                 MaterialNaming.Utf8NoBom);
-            SetStatus("Текст добавлен.");
+            SetStatus(_text.Get("Status_TextAdded"));
             Commit();
             return 1;
         }
         catch (Exception ex)
         {
-            ReportError($"Не удалось сохранить текст: {ex.Message}");
+            ReportError(_text.Format("Error_SaveText", ex.Message));
             return 0;
         }
     }
@@ -1383,7 +1388,7 @@ public sealed class BasketWorkspace
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Не удалось сохранить состояние вкладок: {ex.Message}";
+            StatusMessage = _text.Format("Error_SaveTabState", ex.Message);
             StatusIsError = true;
         }
     }
@@ -1406,14 +1411,14 @@ public sealed class BasketWorkspace
         var normalized = NormalizeRelativePath(relativeFolder);
         if (normalized is null)
         {
-            ReportError("Недопустимый путь папки.");
+            ReportError(_text.Get("Error_InvalidFolderPath"));
             return null;
         }
 
         var path = normalized.Length == 0 ? tab.DirectoryPath : Path.Combine(tab.DirectoryPath, normalized);
         if (!Directory.Exists(path))
         {
-            ReportError("Папка не найдена — возможно, она была перемещена извне.");
+            ReportError(_text.Get("Error_FolderNotFoundMoved"));
             return null;
         }
 
@@ -1452,9 +1457,6 @@ public sealed class BasketWorkspace
 
         return string.Join(Path.DirectorySeparatorChar, parts);
     }
-
-    private static string DisplayFolderName(string relativeFolder)
-        => relativeFolder.Length == 0 ? "корень корзины" : relativeFolder;
 
     private static string RelativeTo(BasketTab tab, string fullPath)
         => Path.GetRelativePath(tab.DirectoryPath, fullPath);

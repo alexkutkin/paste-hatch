@@ -9,7 +9,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
     public void Dispose() => _harness.Dispose();
 
     private WorkspaceRefreshCoordinator Create(BasketWorkspace workspace) => new(workspace, _watcher,
-        action => { _queue.Enqueue(action); return true; }, tree => _renders.Add(tree));
+        action => { _queue.Enqueue(action); return true; }, tree => _renders.Add(tree), _harness.Text);
 
     private void Drain()
     {
@@ -126,7 +126,8 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var reject = true;
         using var coordinator = new WorkspaceRefreshCoordinator(workspace, _watcher,
-            action => { if (reject) return false; _queue.Enqueue(action); return true; }, tree => _renders.Add(tree));
+            action => { if (reject) return false; _queue.Enqueue(action); return true; }, tree => _renders.Add(tree),
+            _harness.Text);
         workspace.Refresh();
         reject = false;
         workspace.ReportStatus("next");

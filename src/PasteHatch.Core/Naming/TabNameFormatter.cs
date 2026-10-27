@@ -3,29 +3,33 @@ using System.Globalization;
 namespace PasteHatch.Core;
 
 /// <summary>
-/// Produces the default basket/material names from a moment in time, e.g. "Пн, 13:02".
-/// Russian culture is fixed on purpose: the brief specifies this exact shape and the app UI
-/// is Russian, so the name must not change with the operating-system display language.
+/// Produces the default basket/material names from a moment in time, e.g. "Пн, 13:02" or
+/// "Mon, 13:02", following the UI culture the app passes in.
 /// </summary>
 public sealed class TabNameFormatter
 {
-    public static readonly TabNameFormatter Default = new();
-
-    private readonly CultureInfo _culture;
+    private readonly Func<CultureInfo> _culture;
 
     public TabNameFormatter()
-        : this(CultureInfo.GetCultureInfo("ru-RU"))
+        : this(() => CultureInfo.CurrentUICulture)
     {
     }
 
-    public TabNameFormatter(CultureInfo culture) => _culture = culture;
+    public TabNameFormatter(CultureInfo culture)
+        : this(() => culture)
+    {
+    }
+
+    /// <summary>Resolves the culture on every call, so a live language switch is honoured.</summary>
+    public TabNameFormatter(Func<CultureInfo> culture) => _culture = culture;
 
     public string Format(DateTimeOffset moment)
     {
+        var culture = _culture();
         var local = moment.LocalDateTime;
-        var weekday = _culture.DateTimeFormat.AbbreviatedDayNames[(int)local.DayOfWeek];
+        var weekday = culture.DateTimeFormat.AbbreviatedDayNames[(int)local.DayOfWeek];
         var capitalized = Capitalize(weekday);
-        return $"{capitalized}, {local.ToString("HH:mm", _culture)}";
+        return $"{capitalized}, {local.ToString("HH:mm", culture)}";
     }
 
     /// <summary>

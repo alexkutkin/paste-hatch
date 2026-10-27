@@ -11,14 +11,14 @@ public static class MaterialNaming
     public const int MaxBaseNameLength = 160;
 
     /// <summary>Returns a file name that does not exist yet in <paramref name="directory"/>.</summary>
-    public static string UniqueFileName(string directory, string desiredFileName)
+    public static string UniqueFileName(string directory, string desiredFileName, ITextProvider text)
     {
         var extension = Path.GetExtension(desiredFileName);
         var baseName = Path.GetFileNameWithoutExtension(desiredFileName);
 
         if (string.IsNullOrEmpty(baseName))
         {
-            baseName = "Материал";
+            baseName = text.Get("Name_DefaultMaterial");
         }
 
         var candidate = desiredFileName;
@@ -32,20 +32,20 @@ public static class MaterialNaming
 
             if (counter > 9999)
             {
-                throw new IOException($"Не удалось подобрать свободное имя файла для «{desiredFileName}».");
+                throw new IOException(text.Format("Error_UniqueFileName", desiredFileName));
             }
         }
 
         return candidate;
     }
 
-    public static string DefaultFileName(string directory, string format, string extension)
+    public static string DefaultFileName(string directory, string format, string extension, ITextProvider text)
     {
         // Defence in depth: callers normally pass TabNameFormatter.FormatAsFileName, but a colon
         // anywhere in the desired name would silently create an NTFS alternate data stream
         // instead of a file, so the base is sanitized for the filesystem here as well.
         var desired = $"{TabNameFormatter.SanitizeFileName(format)}{extension}";
-        return UniqueFileName(directory, desired);
+        return UniqueFileName(directory, desired, text);
     }
 
     public static bool TryGetLink(string? text, out Uri? link)
@@ -84,23 +84,23 @@ public static class MaterialNaming
 
     /// <summary>
     /// Validates the editable part of a file name (extension excluded) before a rename.
-    /// Returns the trimmed value or null with a human-readable Russian error.
+    /// Returns the trimmed value or null with a human-readable error.
     /// </summary>
-    public static string? ValidateRenameBase(string? input, string extension, out string? error)
-        => ValidateName(input, extension, isFolder: false, out error);
+    public static string? ValidateRenameBase(string? input, string extension, ITextProvider text, out string? error)
+        => ValidateName(input, extension, isFolder: false, text, out error);
 
     /// <summary>Validates a folder name with folder-specific error messages.</summary>
-    public static string? ValidateFolderName(string? input, out string? error)
-        => ValidateName(input, string.Empty, isFolder: true, out error);
+    public static string? ValidateFolderName(string? input, ITextProvider text, out string? error)
+        => ValidateName(input, string.Empty, isFolder: true, text, out error);
 
-    private static string? ValidateName(string? input, string extension, bool isFolder, out string? error)
+    private static string? ValidateName(string? input, string extension, bool isFolder, ITextProvider text, out string? error)
     {
         error = null;
-        var subject = isFolder ? "папки" : "файла";
+        var prefix = isFolder ? "FolderName" : "FileName";
 
         if (string.IsNullOrWhiteSpace(input))
         {
-            error = $"Имя {subject} не может быть пустым.";
+            error = text.Get($"Error_{prefix}Empty");
             return null;
         }
 
@@ -108,7 +108,7 @@ public static class MaterialNaming
         // silently instead of telling the user why the name is not accepted.
         if (input.EndsWith(' ') || input.EndsWith('.'))
         {
-            error = $"Имя {subject} не может заканчиваться точкой или пробелом.";
+            error = text.Get($"Error_{prefix}Trailing");
             return null;
         }
 
@@ -116,33 +116,27 @@ public static class MaterialNaming
 
         if (trimmed.Length > MaxBaseNameLength)
         {
-            error = $"Имя {subject} не должно превышать {MaxBaseNameLength} символов.";
+            error = text.Format($"Error_{prefix}TooLong", MaxBaseNameLength);
             return null;
         }
 
         var invalid = Path.GetInvalidFileNameChars();
         if (trimmed.IndexOfAny(invalid) >= 0)
         {
-            error = $"Имя {subject} содержит недопустимые символы: \\ / : * ? \" < > |.";
-            return null;
-        }
-
-        if (trimmed.EndsWith('.'))
-        {
-            error = $"Имя {subject} не может заканчиваться точкой.";
+            error = text.Get($"Error_{prefix}InvalidChars");
             return null;
         }
 
         if (IsReservedDeviceName(trimmed))
         {
-            error = $"«{trimmed}» — служебное имя Windows, его нельзя использовать.";
+            error = text.Format("Error_NameReserved", trimmed);
             return null;
         }
 
         var fullLength = trimmed.Length + extension.Length;
         if (fullLength > 255)
         {
-            error = $"Слишком длинное имя {subject}.";
+            error = text.Get($"Error_{prefix}TotalTooLong");
             return null;
         }
 

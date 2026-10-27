@@ -10,6 +10,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     private readonly IWorkspaceWatcher _watcher;
     private readonly Func<Action, bool> _enqueue;
     private readonly Action<bool> _render;
+    private readonly ITextProvider _text;
     private EventHandler? _changed;
     private EventHandler? _error;
     private string? _watchedUid;
@@ -23,12 +24,13 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     private bool _startingWatch;
 
     public WorkspaceRefreshCoordinator(BasketWorkspace workspace, IWorkspaceWatcher watcher,
-        Func<Action, bool> enqueue, Action<bool> render)
+        Func<Action, bool> enqueue, Action<bool> render, ITextProvider? text = null)
     {
         _workspace = workspace;
         _watcher = watcher;
         _enqueue = enqueue;
         _render = render;
+        _text = text ?? KeyTextProvider.Instance;
         workspace.Changed += OnWorkspaceChanged;
     }
 
@@ -71,7 +73,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         catch (Exception ex)
         {
             StopWatch();
-            _workspace.ReportStatus($"Не удалось включить наблюдение за папкой: {ex.Message}");
+            _workspace.ReportStatus(_text.Format("Error_WatchFolder", ex.Message));
         }
         finally { _startingWatch = false; }
     }

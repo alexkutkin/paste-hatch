@@ -27,6 +27,8 @@ internal sealed class WorkspaceHarness : IDisposable
 
     public FakeConfirmationService Confirmations { get; } = new();
 
+    public ReswTextProvider Text { get; } = ReswTextProvider.Russian;
+
     public TabStateStore Store { get; }
 
     /// <summary>Creates a workspace without calling <see cref="BasketWorkspace.Initialize"/>.</summary>
@@ -38,7 +40,9 @@ internal sealed class WorkspaceHarness : IDisposable
             Clipboard,
             Shell,
             Confirmations,
-            Clock);
+            Clock,
+            new TabNameFormatter(Text.Culture),
+            Text);
         _workspaces.Add(workspace);
         return workspace;
     }

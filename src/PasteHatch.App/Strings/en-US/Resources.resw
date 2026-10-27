@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <!-- Core: naming -->
+  <data name="Name_DefaultMaterial" xml:space="preserve"><value>Material</value></data>
+  <data name="Error_UniqueFileName" xml:space="preserve"><value>Could not find a free file name for “{0}”.</value></data>
+  <data name="Error_FileNameEmpty" xml:space="preserve"><value>The file name cannot be empty.</value></data>
+  <data name="Error_FolderNameEmpty" xml:space="preserve"><value>The folder name cannot be empty.</value></data>
+  <data name="Error_FileNameTrailing" xml:space="preserve"><value>The file name cannot end with a dot or a space.</value></data>
+  <data name="Error_FolderNameTrailing" xml:space="preserve"><value>The folder name cannot end with a dot or a space.</value></data>
+  <data name="Error_FileNameTooLong" xml:space="preserve"><value>The file name cannot be longer than {0} characters.</value></data>
+  <data name="Error_FolderNameTooLong" xml:space="preserve"><value>The folder name cannot be longer than {0} characters.</value></data>
+  <data name="Error_FileNameInvalidChars" xml:space="preserve"><value>The file name contains invalid characters: \ / : * ? " &lt; &gt; |.</value></data>
+  <data name="Error_FolderNameInvalidChars" xml:space="preserve"><value>The folder name contains invalid characters: \ / : * ? " &lt; &gt; |.</value></data>
+  <data name="Error_NameReserved" xml:space="preserve"><value>“{0}” is a reserved Windows name and cannot be used.</value></data>
+  <data name="Error_FileNameTotalTooLong" xml:space="preserve"><value>The file name is too long.</value></data>
+  <data name="Error_FolderNameTotalTooLong" xml:space="preserve"><value>The folder name is too long.</value></data>
+
+  <!-- Core: baskets, folders and materials -->
+  <data name="Status_BasketLimit" xml:space="preserve"><value>The limit of 10 baskets has been reached.</value></data>
+  <data name="Error_CreateBasket" xml:space="preserve"><value>Could not create a basket: {0}</value></data>
+  <data name="Status_LastBasket" xml:space="preserve"><value>The last basket cannot be closed.</value></data>
+  <data name="Error_RecycleBasket" xml:space="preserve"><value>Could not move the basket to the Windows Recycle Bin: {0}</value></data>
+  <data name="Status_BasketRecycled" xml:space="preserve"><value>Basket “{0}” was moved to the Windows Recycle Bin.</value></data>
+  <data name="Error_Navigate" xml:space="preserve"><value>Could not open the folder.</value></data>
+  <data name="Error_FolderNotFoundMoved" xml:space="preserve"><value>The folder was not found — it may have been moved outside the app.</value></data>
+  <data name="Error_ReadClipboard" xml:space="preserve"><value>Could not read the clipboard: {0}</value></data>
+  <data name="Status_UnsupportedClipboard" xml:space="preserve"><value>The clipboard does not contain supported data.</value></data>
+  <data name="Status_NoFilesToAdd" xml:space="preserve"><value>There are no files to add.</value></data>
+  <data name="Error_SaveNote" xml:space="preserve"><value>Could not save the note: {0}</value></data>
+  <data name="Error_InvalidFolderName" xml:space="preserve"><value>The folder name is not valid.</value></data>
+  <data name="Error_FolderExists" xml:space="preserve"><value>The folder “{0}” already exists.</value></data>
+  <data name="Status_FolderCreated" xml:space="preserve"><value>Folder “{0}” was created.</value></data>
+  <data name="Error_CreateFolder" xml:space="preserve"><value>Could not create the folder: {0}</value></data>
+  <data name="Error_FolderNotFoundMovedNamed" xml:space="preserve"><value>Folder “{0}” was not found — it may have been moved outside the app.</value></data>
+  <data name="Error_RenameFolder" xml:space="preserve"><value>Could not rename the folder: {0}</value></data>
+  <data name="Status_FolderRenamed" xml:space="preserve"><value>Folder “{0}” was renamed to “{1}”.</value></data>
+  <data name="Error_FolderNotFound" xml:space="preserve"><value>Folder “{0}” was not found.</value></data>
+  <data name="Error_RecycleFolder" xml:space="preserve"><value>Could not move the folder to the Windows Recycle Bin: {0}</value></data>
+  <data name="Status_FolderRecycled" xml:space="preserve"><value>Folder “{0}” was moved to the Windows Recycle Bin.</value></data>
+  <data name="Error_InvalidFileName" xml:space="preserve"><value>The file name is not valid.</value></data>
+  <data name="Error_FileNotFoundMoved" xml:space="preserve"><value>File “{0}” was not found — it may have been moved outside the app.</value></data>
+  <data name="Error_FileExists" xml:space="preserve"><value>A file or folder named “{0}” already exists in this basket.</value></data>
+  <data name="Error_RenameFile" xml:space="preserve"><value>Could not rename the file: {0}</value></data>
+  <data name="Status_FileRenamed" xml:space="preserve"><value>File “{0}” was renamed to “{1}”.</value></data>
+  <data name="Error_RecycleFile" xml:space="preserve"><value>Could not move the file to the Windows Recycle Bin: {0}</value></data>
+  <data name="Status_FileRecycled" xml:space="preserve"><value>File “{0}” was moved to the Windows Recycle Bin.</value></data>
+  <data name="Error_FileNotFound" xml:space="preserve"><value>File “{0}” was not found.</value></data>
+  <data name="Error_OpenFile" xml:space="preserve"><value>Could not open the file: {0}</value></data>
+  <data name="Error_OpenFolder" xml:space="preserve"><value>Could not open the folder: {0}</value></data>
+  <data name="Error_OpenBasketFolder" xml:space="preserve"><value>Could not open the basket folder: {0}</value></data>
+  <data name="Status_FolderPathCopied" xml:space="preserve"><value>Folder path copied to the clipboard.</value></data>
+  <data name="Status_FilePathCopied" xml:space="preserve"><value>File path copied to the clipboard.</value></data>
+  <data name="Error_CopyPath" xml:space="preserve"><value>Could not copy the path: {0}</value></data>
+  <data name="Status_NoFilesToMove" xml:space="preserve"><value>There are no files to move.</value></data>
+  <data name="Error_GenerateUid" xml:space="preserve"><value>Could not generate a free basket ID.</value></data>
+  <data name="Status_EntryCut" xml:space="preserve"><value>“{0}” was cut to the clipboard.</value></data>
+  <data name="Status_EntryCopied" xml:space="preserve"><value>“{0}” was copied to the clipboard.</value></data>
+  <data name="Error_CopyToClipboard" xml:space="preserve"><value>Could not copy to the clipboard: {0}</value></data>
+  <data name="Status_NoImage" xml:space="preserve"><value>The clipboard does not contain an image.</value></data>
+  <data name="Status_ScreenshotAdded" xml:space="preserve"><value>Screenshot “{0}” was added.</value></data>
+  <data name="Error_SaveImage" xml:space="preserve"><value>Could not save the image: {0}</value></data>
+  <data name="Status_NoText" xml:space="preserve"><value>The clipboard does not contain text.</value></data>
+  <data name="Status_LinkAdded" xml:space="preserve"><value>Link “{0}” was added.</value></data>
+  <data name="Status_TextAdded" xml:space="preserve"><value>Text was added.</value></data>
+  <data name="Error_SaveText" xml:space="preserve"><value>Could not save the text: {0}</value></data>
+  <data name="Error_SaveTabState" xml:space="preserve"><value>Could not save the tab state: {0}</value></data>
+  <data name="Error_InvalidFolderPath" xml:space="preserve"><value>The folder path is not valid.</value></data>
+  <data name="Error_WatchFolder" xml:space="preserve"><value>Could not start watching the folder: {0}</value></data>
+
+  <!-- Core: file transfer -->
+  <data name="Error_FileNotFoundPath" xml:space="preserve"><value>File not found: {0}</value></data>
+  <data name="Error_LinkNotCopied" xml:space="preserve"><value>Folder links cannot be copied or moved.</value></data>
+  <data name="Error_FolderIntoItself" xml:space="preserve"><value>A folder cannot be copied or moved into itself.</value></data>
+  <data name="Error_DriveRoot" xml:space="preserve"><value>A drive root cannot be transferred.</value></data>
+  <data name="Folder_Root" xml:space="preserve"><value>basket root</value></data>
+  <data name="Status_NothingMoved" xml:space="preserve"><value>No items were moved.</value></data>
+  <data name="Status_OneItemMoved" xml:space="preserve"><value>1 item was moved to “{0}”.</value></data>
+  <data name="Status_ItemsMoved" xml:space="preserve"><value>Moved {0} to “{1}”.</value></data>
+  <data name="Status_NothingCopied" xml:space="preserve"><value>No items were copied.</value></data>
+  <data name="Status_ItemsCopied" xml:space="preserve"><value>Copied {0} to “{1}”.</value></data>
+  <data name="Status_Added" xml:space="preserve"><value>Added {0}.</value></data>
+  <data name="Status_AddedPartly" xml:space="preserve"><value>Added {0} (some files were already in the basket).</value></data>
+  <data name="Status_AlreadyInBasket" xml:space="preserve"><value>The files are already in this basket.</value></data>
+  <data name="Status_NothingAdded" xml:space="preserve"><value>No materials were added.</value></data>
+  <data name="Status_OneFileAdded" xml:space="preserve"><value>Added 1 file.</value></data>
+  <data name="Status_OneFileAddedPartly" xml:space="preserve"><value>Added 1 file (some files were already in the basket).</value></data>
+  <data name="Error_UniqueFolderName" xml:space="preserve"><value>Could not find a free folder name for “{0}”.</value></data>
+  <data name="Count_Items.One" xml:space="preserve"><value>{0} item</value></data>
+  <data name="Count_Items.Few" xml:space="preserve"><value>{0} items</value></data>
+  <data name="Count_Items.Many" xml:space="preserve"><value>{0} items</value></data>
+  <data name="Count_Files.One" xml:space="preserve"><value>{0} file</value></data>
+  <data name="Count_Files.Few" xml:space="preserve"><value>{0} files</value></data>
+  <data name="Count_Files.Many" xml:space="preserve"><value>{0} files</value></data>
+
+  <!-- Main window -->
+  <data name="Command_Paste" xml:space="preserve"><value>Paste</value></data>
+  <data name="ToolTip_Paste" xml:space="preserve"><value>Paste from the clipboard (Ctrl+V)</value></data>
+  <data name="Command_NewFolder" xml:space="preserve"><value>New folder</value></data>
+  <data name="ToolTip_NewFolder" xml:space="preserve"><value>Create a folder (Ctrl+Shift+N)</value></data>
+  <data name="Command_OpenFolder" xml:space="preserve"><value>Open folder</value></data>
+  <data name="ToolTip_OpenFolder" xml:space="preserve"><value>Open the current folder in File Explorer</value></data>
+  <data name="Command_CopyPath" xml:space="preserve"><value>Copy path</value></data>
+  <data name="ToolTip_CopyPath" xml:space="preserve"><value>Copy the current folder path</value></data>
+  <data name="Command_Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="Header_Baskets" xml:space="preserve"><value>Baskets</value></data>
+  <data name="Action_CreateBasket" xml:space="preserve"><value>Create basket</value></data>
+  <data name="ToolTip_CreateBasket" xml:space="preserve"><value>Create a basket (Ctrl+T)</value></data>
+  <data name="Action_DeleteBasket" xml:space="preserve"><value>Delete basket</value></data>
+  <data name="Action_Up" xml:space="preserve"><value>Up one level</value></data>
+  <data name="ToolTip_Up" xml:space="preserve"><value>Up one level (Alt+↑)</value></data>
+  <data name="Label_CurrentFolder" xml:space="preserve"><value>Current folder</value></data>
+  <data name="Label_BasketFiles" xml:space="preserve"><value>Basket files</value></data>
+  <data name="ToolTip_ExtensionFixed" xml:space="preserve"><value>The extension stays the same</value></data>
+  <data name="Action_SaveName" xml:space="preserve"><value>Save name</value></data>
+  <data name="Action_Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Action_CancelRename" xml:space="preserve"><value>Cancel rename</value></data>
+  <data name="Action_Open" xml:space="preserve"><value>Open</value></data>
+  <data name="ToolTip_OpenEntry" xml:space="preserve"><value>Open the file or folder</value></data>
+  <data name="ToolTip_CopyEntryPath" xml:space="preserve"><value>Copy the path of the file or folder</value></data>
+  <data name="State_EmptyBasket" xml:space="preserve"><value>The basket is empty</value></data>
+  <data name="State_EmptyHint" xml:space="preserve"><value>Press Ctrl+V or drag files and folders into the window</value></data>
+  <data name="Action_PasteFromClipboard" xml:space="preserve"><value>Paste from clipboard</value></data>
+  <data name="Label_TextPreview" xml:space="preserve"><value>Text preview</value></data>
+  <data name="Preview_Placeholder" xml:space="preserve"><value>Select a file to see its contents.</value></data>
+  <data name="Label_QuickNote" xml:space="preserve"><value>Quick note</value></data>
+  <data name="Placeholder_QuickNote" xml:space="preserve"><value>Type text and press Enter</value></data>
+  <data name="Action_Add" xml:space="preserve"><value>Add</value></data>
+  <data name="ToolTip_SaveNote" xml:space="preserve"><value>Save the note (Enter)</value></data>
+
+  <!-- Main window: code-built text -->
+  <data name="Error_StartupInit" xml:space="preserve"><value>Could not initialize the basket storage: {0}</value></data>
+  <data name="Error_Unexpected" xml:space="preserve"><value>Unexpected error: {0}</value></data>
+  <data name="Menu_OpenInExplorerBasket" xml:space="preserve"><value>Open folder in File Explorer</value></data>
+  <data name="Menu_Rename" xml:space="preserve"><value>Rename</value></data>
+  <data name="Menu_CloseBasket" xml:space="preserve"><value>Close basket…</value></data>
+  <data name="Menu_ExpandCollapse" xml:space="preserve"><value>Expand / collapse</value></data>
+  <data name="Menu_Open" xml:space="preserve"><value>Open</value></data>
+  <data name="Menu_OpenInExplorer" xml:space="preserve"><value>Open in File Explorer</value></data>
+  <data name="Menu_Cut" xml:space="preserve"><value>Cut</value></data>
+  <data name="Menu_Copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="Menu_Delete" xml:space="preserve"><value>Delete…</value></data>
+  <data name="Preview_FolderExpanded" xml:space="preserve"><value>Folder. Its contents are shown in the tree.</value></data>
+  <data name="Preview_FolderCollapsed" xml:space="preserve"><value>Folder. Expand it in the tree to see its contents.</value></data>
+  <data name="Preview_ReadError" xml:space="preserve"><value>Could not read the file: {0}</value></data>
+  <data name="Preview_Unsupported" xml:space="preserve"><value>Preview is not available for this file type.</value></data>
+  <data name="Preview_ImageError" xml:space="preserve"><value>Could not show the image: {0}</value></data>
+  <data name="Drag_MoveToFolder" xml:space="preserve"><value>Move to “{0}”</value></data>
+  <data name="Drag_CopyToFolder" xml:space="preserve"><value>Copy to “{0}”</value></data>
+  <data name="Drag_MoveToCurrent" xml:space="preserve"><value>Move to the current folder</value></data>
+  <data name="Drag_CopyToBasket" xml:space="preserve"><value>Copy to the basket</value></data>
+  <data name="Error_DropFiles" xml:space="preserve"><value>Could not add the dropped files: {0}</value></data>
+  <data name="Default_NewFolderName" xml:space="preserve"><value>New folder</value></data>
+
+  <!-- Material kinds and sizes -->
+  <data name="Kind_Folder" xml:space="preserve"><value>Folder</value></data>
+  <data name="Kind_Image" xml:space="preserve"><value>Image</value></data>
+  <data name="Kind_Text" xml:space="preserve"><value>Text</value></data>
+  <data name="Kind_Link" xml:space="preserve"><value>Link</value></data>
+  <data name="Kind_File" xml:space="preserve"><value>File</value></data>
+  <data name="Size_Bytes" xml:space="preserve"><value>{0} B</value></data>
+  <data name="Size_KB" xml:space="preserve"><value>{0:0.#} KB</value></data>
+  <data name="Size_MB" xml:space="preserve"><value>{0:0.#} MB</value></data>
+  <data name="Size_GB" xml:space="preserve"><value>{0:0.#} GB</value></data>
+
+  <!-- Tray -->
+  <data name="Tray_ShowWindow" xml:space="preserve"><value>Show window</value></data>
+  <data name="Tray_Exit" xml:space="preserve"><value>Exit</value></data>
+
+  <!-- Confirmations and errors -->
+  <data name="Confirm_DeleteBasketHeading" xml:space="preserve"><value>Delete basket?</value></data>
+  <data name="Confirm_DeleteBasketText" xml:space="preserve"><value>Basket “{0}” and all its files will be moved to the Windows Recycle Bin, from where they can be restored.</value></data>
+  <data name="Confirm_DeleteFileHeading" xml:space="preserve"><value>Delete file?</value></data>
+  <data name="Confirm_DeleteFileText" xml:space="preserve"><value>File “{0}” will be moved to the Windows Recycle Bin.</value></data>
+  <data name="Confirm_DeleteFolderHeading" xml:space="preserve"><value>Delete folder?</value></data>
+  <data name="Confirm_DeleteFolderText" xml:space="preserve"><value>Folder “{0}” and all its contents will be moved to the Windows Recycle Bin.</value></data>
+  <data name="Error_Heading" xml:space="preserve"><value>Error</value></data>
+  <data name="Button_Recycle" xml:space="preserve"><value>Move to Recycle Bin</value></data>
+  <data name="Expander_ShowPath" xml:space="preserve"><value>Show path</value></data>
+  <data name="Expander_HidePath" xml:space="preserve"><value>Hide path</value></data>
+
+  <!-- Settings -->
+  <data name="Settings_Title" xml:space="preserve"><value>Settings — PasteHatch</value></data>
+  <data name="Settings_General" xml:space="preserve"><value>General</value></data>
+  <data name="Settings_StartInTray" xml:space="preserve"><value>Start in the tray</value></data>
+  <data name="Settings_StartInTrayDesc" xml:space="preserve"><value>On launch the window stays hidden and the app runs in the notification area. The first launch is the exception.</value></data>
+  <data name="Settings_RememberPlacement" xml:space="preserve"><value>Remember the window position</value></data>
+  <data name="Settings_RememberPlacementDesc" xml:space="preserve"><value>The next launch opens the window in the same place and size.</value></data>
+  <data name="Settings_AlwaysOnTop" xml:space="preserve"><value>Always on top</value></data>
+  <data name="Settings_AlwaysOnTopDesc" xml:space="preserve"><value>The window stays in front while you work with other apps.</value></data>
+  <data name="Settings_Language" xml:space="preserve"><value>Language</value></data>
+  <data name="Settings_LanguageDesc" xml:space="preserve"><value>Interface language. Changes apply immediately.</value></data>
+  <data name="Settings_About" xml:space="preserve"><value>About</value></data>
+  <data name="Settings_AboutDesc" xml:space="preserve"><value>Context baskets for local AI agents. Materials are stored in basket folders under %LOCALAPPDATA%\PasteHatch.</value></data>
+  <data name="Settings_Version" xml:space="preserve"><value>Version {0}</value></data>
+  <data name="Action_ResetSettings" xml:space="preserve"><value>Reset settings</value></data>
+  <data name="Action_Done" xml:space="preserve"><value>Done</value></data>
+</root>

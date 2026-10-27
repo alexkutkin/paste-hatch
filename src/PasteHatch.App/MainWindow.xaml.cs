@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -43,8 +42,6 @@ public sealed partial class MainWindow : Window
     private const double MinTreeWidth = 160;
     private const double MinPreviewWidth = 200;
     private const int MaxTextPreviewCharacters = 64 * 1024;
-
-    private static readonly CultureInfo UiCulture = CultureInfo.GetCultureInfo("ru-RU");
 
     private readonly ConfirmationService _confirmations;
     private readonly ShellService _shell;
@@ -98,10 +95,12 @@ public sealed partial class MainWindow : Window
             TabStateStore.CreateDefault(),
             clipboard,
             _shell,
-            _confirmations);
+            _confirmations,
+            formatter: new TabNameFormatter(() => Localization.Culture),
+            text: Localization.Text);
         _treeNavigation = new BasketTreeNavigation(_workspace);
         _liveRefresh = new WorkspaceRefreshCoordinator(_workspace, new FolderWatcher(),
-            action => DispatcherQueue.TryEnqueue(() => action()), RefreshAll);
+            action => DispatcherQueue.TryEnqueue(() => action()), RefreshAll, Localization.Text);
 
         ConfigureWindowShell();
 
@@ -122,12 +121,21 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _startupError = $"Не удалось инициализировать хранилище корзин: {ex.Message}";
+            _startupError = Localization.Text.Format("Error_StartupInit", ex.Message);
         }
 
         _tray = _testNoTray
             ? null
             : new TrayIcon(ToggleWindowVisibility, ShowFromTray, OpenSettings, ExitApplication);
+
+        Localization.LanguageChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        _tray?.RefreshTexts();
+        _workspace.ReportStatus(string.Empty);
+        RefreshAll();
     }
 
     public void InitializeAtStartup(bool forceShow)
@@ -200,7 +208,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            _confirmations.ShowError($"Непредвиденная ошибка: {exception.Message}");
+            _confirmations.ShowError(Localization.Text.Format("Error_Unexpected", exception.Message));
         }
         catch (Exception)
         {
@@ -446,6 +454,7 @@ public sealed partial class MainWindow : Window
     {
         _settings = settings;
         NativeWindow.SetAlwaysOnTop(GetWindowHandle(), settings.AlwaysOnTop);
+        Localization.SetLanguage(settings.Language);
     }
 
     // ---- Presentation ---------------------------------------------------------------
@@ -490,7 +499,7 @@ public sealed partial class MainWindow : Window
         AddBasketButton.IsEnabled = _workspace.CanCreateTab;
         ToolTipService.SetToolTip(
             AddBasketButton,
-            _workspace.CanCreateTab ? "Создать корзину (Ctrl+T)" : "Достигнут предел в 10 корзин");
+            Localization.Text.Get(_workspace.CanCreateTab ? "ToolTip_CreateBasket" : "Status_BasketLimit"));
     }
 
     private void RefreshStatus()
@@ -685,7 +694,7 @@ public sealed partial class MainWindow : Window
 
         var flyout = new MenuFlyout();
 
-        var open = new MenuFlyoutItem { Text = "Открыть папку в Проводнике" };
+        var open = new MenuFlyoutItem { Text = Localization.Text.Get("Menu_OpenInExplorerBasket") };
         open.Click += (_, _) =>
         {
             if (_workspace.ActivateTab(row.Uid))
@@ -694,10 +703,10 @@ public sealed partial class MainWindow : Window
             }
         };
 
-        var rename = new MenuFlyoutItem { Text = "Переименовать" };
+        var rename = new MenuFlyoutItem { Text = Localization.Text.Get("Menu_Rename") };
         rename.Click += (_, _) => BeginBasketRename(row);
 
-        var close = new MenuFlyoutItem { Text = "Закрыть корзину…" };
+        var close = new MenuFlyoutItem { Text = Localization.Text.Get("Menu_CloseBasket") };
         close.Click += (_, _) => _workspace.CloseTab(row.Uid);
 
         flyout.Items.Add(open);
@@ -962,7 +971,7 @@ public sealed partial class MainWindow : Window
         BasketPathText.Text = _workspace.SelectedFolderPath;
         ToolTipService.SetToolTip(BasketPathText, _workspace.SelectedFolderPath);
         UpButton.IsEnabled = folder.Length > 0;
-        FileCountText.Text = RussianPlural.Items(CurrentFolderItemCount());
+        FileCountText.Text = Localization.Text.Plural("Count_Items", CurrentFolderItemCount());
 
         RefreshBreadcrumb();
         ShowPreview(_selectedNode);
@@ -1154,7 +1163,10 @@ public sealed partial class MainWindow : Window
     {
         var flyout = new MenuFlyout();
 
-        var open = new MenuFlyoutItem { Text = node.IsFolder ? "Развернуть / свернуть" : "Открыть" };
+        var open = new MenuFlyoutItem
+        {
+            Text = Localization.Text.Get(node.IsFolder ? "Menu_ExpandCollapse" : "Menu_Open"),
+        };
         open.Click += (_, _) =>
         {
             if (node.IsFolder && FileTree.SelectedNode is { } selectedNode)
@@ -1167,7 +1179,7 @@ public sealed partial class MainWindow : Window
             }
         };
 
-        var explore = new MenuFlyoutItem { Text = "Открыть в Проводнике" };
+        var explore = new MenuFlyoutItem { Text = Localization.Text.Get("Menu_OpenInExplorer") };
         explore.Click += (_, _) =>
         {
             if (node.IsFolder)
@@ -1180,7 +1192,7 @@ public sealed partial class MainWindow : Window
             }
         };
 
-        var copyPath = new MenuFlyoutItem { Text = "Скопировать путь" };
+        var copyPath = new MenuFlyoutItem { Text = Localization.Text.Get("Command_CopyPath") };
         copyPath.Click += (_, _) => _workspace.CopyEntryPath(node.Entry);
 
         flyout.Items.Add(open);
@@ -1189,16 +1201,16 @@ public sealed partial class MainWindow : Window
 
         if (!node.IsRoot)
         {
-            var rename = new MenuFlyoutItem { Text = "Переименовать" };
+            var rename = new MenuFlyoutItem { Text = Localization.Text.Get("Menu_Rename") };
             rename.Click += (_, _) => BeginNodeRename(node);
 
-            var cut = new MenuFlyoutItem { Text = "Вырезать" };
+            var cut = new MenuFlyoutItem { Text = Localization.Text.Get("Menu_Cut") };
             cut.Click += (_, _) => CopyOrCutNode(node, move: true);
 
-            var copy = new MenuFlyoutItem { Text = "Копировать" };
+            var copy = new MenuFlyoutItem { Text = Localization.Text.Get("Menu_Copy") };
             copy.Click += (_, _) => CopyOrCutNode(node, move: false);
 
-            var delete = new MenuFlyoutItem { Text = "Удалить…" };
+            var delete = new MenuFlyoutItem { Text = Localization.Text.Get("Menu_Delete") };
             delete.Click += (_, _) => DeleteNode(node);
 
             flyout.Items.Add(rename);
@@ -1342,7 +1354,7 @@ public sealed partial class MainWindow : Window
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewText.Text = string.Empty;
         PreviewText.Visibility = Visibility.Collapsed;
-        PreviewPlaceholder.Text = "Выберите файл, чтобы увидеть его содержимое.";
+        PreviewPlaceholder.Text = Localization.Text.Get("Preview_Placeholder");
         PreviewPlaceholder.Visibility = Visibility.Visible;
 
         if (node is null)
@@ -1354,14 +1366,15 @@ public sealed partial class MainWindow : Window
 
         PreviewTitle.Text = node.Name;
         PreviewMeta.Text = node.IsFolder
-            ? "Папка"
-            : $"{node.Entry.TypeLabel} · {node.SizeText} · {node.Entry.Modified.LocalDateTime.ToString("g", UiCulture)}";
+            ? Localization.Text.Get("Kind_Folder")
+            : $"{node.TypeLabel} · {node.SizeText} · {node.Entry.Modified.LocalDateTime.ToString("g", Localization.Culture)}";
 
         if (node.IsFolder)
         {
-            PreviewPlaceholder.Text = FileTree.SelectedNode?.IsExpanded == true
-                ? "Папка. Содержимое показано в дереве."
-                : "Папка. Разверните её в дереве, чтобы увидеть содержимое.";
+            PreviewPlaceholder.Text = Localization.Text.Get(
+                FileTree.SelectedNode?.IsExpanded == true
+                    ? "Preview_FolderExpanded"
+                    : "Preview_FolderCollapsed");
             return;
         }
 
@@ -1387,12 +1400,12 @@ public sealed partial class MainWindow : Window
             }
             catch (Exception ex)
             {
-                PreviewPlaceholder.Text = $"Не удалось прочитать файл: {ex.Message}";
+                PreviewPlaceholder.Text = Localization.Text.Format("Preview_ReadError", ex.Message);
             }
         }
         else
         {
-            PreviewPlaceholder.Text = "Для этого типа файла предпросмотр не поддерживается.";
+            PreviewPlaceholder.Text = Localization.Text.Get("Preview_Unsupported");
         }
     }
 
@@ -1418,7 +1431,7 @@ public sealed partial class MainWindow : Window
         {
             if (sequence == _previewSequence)
             {
-                PreviewPlaceholder.Text = $"Не удалось показать изображение: {ex.Message}";
+                PreviewPlaceholder.Text = Localization.Text.Format("Preview_ImageError", ex.Message);
             }
         }
     }
@@ -1518,7 +1531,8 @@ public sealed partial class MainWindow : Window
     private void CreateNewFolder()
     {
         _workspace.RememberFolder(CurrentFolder);
-        var folder = _workspace.CreateFolder("Новая папка", ensureUnique: true);
+        var folder = _workspace.CreateFolder(
+            Localization.Text.Get("Default_NewFolderName"), ensureUnique: true);
         if (folder is null)
         {
             return;
@@ -1591,8 +1605,8 @@ public sealed partial class MainWindow : Window
             ? DataPackageOperation.Move
             : DataPackageOperation.Copy;
         e.DragUIOverride.Caption = _internalDragPaths.Count > 0
-            ? $"Переместить в «{folder.Name}»"
-            : $"Скопировать в «{folder.Name}»";
+            ? Localization.Text.Format("Drag_MoveToFolder", folder.Name)
+            : Localization.Text.Format("Drag_CopyToFolder", folder.Name);
         e.DragUIOverride.IsCaptionVisible = true;
         e.Handled = true;
     }
@@ -1619,7 +1633,7 @@ public sealed partial class MainWindow : Window
         if (_internalDragPaths.Count > 0)
         {
             e.AcceptedOperation = DataPackageOperation.Move;
-            e.DragUIOverride.Caption = "Переместить в текущую папку";
+            e.DragUIOverride.Caption = Localization.Text.Get("Drag_MoveToCurrent");
             e.DragUIOverride.IsCaptionVisible = true;
             e.Handled = true;
             return;
@@ -1628,7 +1642,7 @@ public sealed partial class MainWindow : Window
         if (e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             e.AcceptedOperation = DataPackageOperation.Copy;
-            e.DragUIOverride.Caption = "Скопировать в корзину";
+            e.DragUIOverride.Caption = Localization.Text.Get("Drag_CopyToBasket");
             e.DragUIOverride.IsCaptionVisible = true;
             e.Handled = true;
             UpdateDropHighlight(true);
@@ -1677,7 +1691,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _confirmations.ShowError($"Не удалось добавить перетащенные файлы: {ex.Message}");
+            _confirmations.ShowError(Localization.Text.Format("Error_DropFiles", ex.Message));
         }
     }
 

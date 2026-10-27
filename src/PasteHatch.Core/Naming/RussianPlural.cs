@@ -1,29 +1,31 @@
 namespace PasteHatch.Core;
 
-/// <summary>Russian plural forms used by the counts in the UI ("3 файла", "5 файлов").</summary>
+/// <summary>Russian plural categories used to pick the right counted phrase ("3 файла", "5 файлов").</summary>
+public enum PluralForm
+{
+    One,
+    Few,
+    Many,
+}
+
+/// <summary>Russian plural rules: one for 1, few for 2–4, many for 0 and 5–20, 11–14 always many.</summary>
 public static class RussianPlural
 {
-    public static string Files(int count) => $"{count} {Noun(count, "файл", "файла", "файлов")}";
-
-    public static string Items(int count) => $"{count} {Noun(count, "элемент", "элемента", "элементов")}";
-
-    public static string Baskets(int count) => $"{count} {Noun(count, "корзина", "корзины", "корзин")}";
-
-    public static string Noun(int count, string one, string few, string many)
+    public static PluralForm Form(int count)
     {
         var lastTwo = Math.Abs(count) % 100;
         var last = Math.Abs(count) % 10;
 
         if (lastTwo is >= 11 and <= 14)
         {
-            return many;
+            return PluralForm.Many;
         }
 
         return last switch
         {
-            1 => one,
-            >= 2 and <= 4 => few,
-            _ => many,
+            1 => PluralForm.One,
+            >= 2 and <= 4 => PluralForm.Few,
+            _ => PluralForm.Many,
         };
     }
 }

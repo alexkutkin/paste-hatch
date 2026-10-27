@@ -4,10 +4,12 @@ namespace PasteHatch.Core.Tests;
 
 public sealed class TabNameFormatterTests
 {
+    private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
+
     [Fact]
     public void Format_FixedMondayAfternoon_ReturnsShortWeekdayAndTime()
     {
-        var formatter = new TabNameFormatter();
+        var formatter = new TabNameFormatter(Russian);
 
         var name = formatter.Format(TestMoments.MondayAfternoon);
 
@@ -17,7 +19,7 @@ public sealed class TabNameFormatterTests
     [Fact]
     public void Format_WeekdayAbbreviation_HasNoTrailingDot()
     {
-        var formatter = new TabNameFormatter();
+        var formatter = new TabNameFormatter(Russian);
 
         var name = formatter.Format(TestMoments.MondayAfternoon);
 
@@ -27,7 +29,7 @@ public sealed class TabNameFormatterTests
     [Fact]
     public void Format_JustPastThursdayMidnight_UsesTwoDigitTime()
     {
-        var formatter = new TabNameFormatter();
+        var formatter = new TabNameFormatter(Russian);
 
         var name = formatter.Format(TestMoments.ThursdayMidnight);
 
@@ -37,7 +39,7 @@ public sealed class TabNameFormatterTests
     [Fact]
     public void Format_LateEvening_UsesTwentyFourHourClock()
     {
-        var formatter = new TabNameFormatter();
+        var formatter = new TabNameFormatter(Russian);
         var lateEvening = TestMoments.Local(2026, 10, 19, 23, 59);
 
         var name = formatter.Format(lateEvening);
@@ -48,7 +50,7 @@ public sealed class TabNameFormatterTests
     [Fact]
     public void Format_SingleDigitHourAndMinute_AreZeroPadded()
     {
-        var formatter = new TabNameFormatter();
+        var formatter = new TabNameFormatter(Russian);
         var morning = TestMoments.Local(2026, 10, 19, 9, 5);
 
         var name = formatter.Format(morning);
@@ -66,7 +68,7 @@ public sealed class TabNameFormatterTests
     [InlineData(25, "Вс")]
     public void Format_EachWeekday_UsesRussianShortName(int dayOfOctober2026, string expectedWeekday)
     {
-        var formatter = new TabNameFormatter();
+        var formatter = new TabNameFormatter(Russian);
         var moment = TestMoments.Local(2026, 10, dayOfOctober2026, 13, 2);
 
         var name = formatter.Format(moment);
@@ -77,7 +79,7 @@ public sealed class TabNameFormatterTests
     [Fact]
     public void Format_NameShape_MatchesExpectedPattern()
     {
-        var formatter = new TabNameFormatter();
+        var formatter = new TabNameFormatter(Russian);
 
         var name = formatter.Format(TestMoments.MondayAfternoon);
 
@@ -87,7 +89,7 @@ public sealed class TabNameFormatterTests
     [Fact]
     public void FormatAsFileName_ReplacesColonWithDash()
     {
-        var formatter = new TabNameFormatter(new CultureInfo("ru-RU"));
+        var formatter = new TabNameFormatter(Russian);
 
         Assert.Equal("Пн, 13:02", formatter.Format(TestMoments.MondayAfternoon));
         Assert.Equal("Пн, 13-02", formatter.FormatAsFileName(TestMoments.MondayAfternoon));
@@ -96,7 +98,7 @@ public sealed class TabNameFormatterTests
     [Fact]
     public void FormatAsFileName_LateEvening_ReturnsFilesystemSafeName()
     {
-        var formatter = new TabNameFormatter();
+        var formatter = new TabNameFormatter(Russian);
         var lateEvening = TestMoments.Local(2026, 10, 19, 23, 59);
 
         var fileNameBase = formatter.FormatAsFileName(lateEvening);

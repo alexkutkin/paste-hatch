@@ -3,45 +3,24 @@ namespace PasteHatch.Core.Tests;
 public sealed class RussianPluralTests
 {
     [Theory]
-    [InlineData(0, "файлов")]
-    [InlineData(1, "файл")]
-    [InlineData(2, "файла")]
-    [InlineData(3, "файла")]
-    [InlineData(4, "файла")]
-    [InlineData(5, "файлов")]
-    [InlineData(11, "файлов")]
-    [InlineData(12, "файлов")]
-    [InlineData(14, "файлов")]
-    [InlineData(21, "файл")]
-    [InlineData(22, "файла")]
-    [InlineData(25, "файлов")]
-    [InlineData(100, "файлов")]
-    [InlineData(101, "файл")]
-    [InlineData(111, "файлов")]
-    public void Files_UsesRussianPluralForm(int count, string expectedNoun)
+    [InlineData(0, PluralForm.Many)]
+    [InlineData(1, PluralForm.One)]
+    [InlineData(2, PluralForm.Few)]
+    [InlineData(3, PluralForm.Few)]
+    [InlineData(4, PluralForm.Few)]
+    [InlineData(5, PluralForm.Many)]
+    [InlineData(11, PluralForm.Many)]
+    [InlineData(12, PluralForm.Many)]
+    [InlineData(14, PluralForm.Many)]
+    [InlineData(21, PluralForm.One)]
+    [InlineData(22, PluralForm.Few)]
+    [InlineData(25, PluralForm.Many)]
+    [InlineData(100, PluralForm.Many)]
+    [InlineData(101, PluralForm.One)]
+    [InlineData(111, PluralForm.Many)]
+    [InlineData(121, PluralForm.One)]
+    public void Form_FollowsRussianPluralRules(int count, PluralForm expected)
     {
-        Assert.Equal($"{count} {expectedNoun}", RussianPlural.Files(count));
-    }
-
-    [Theory]
-    [InlineData(1, "корзина")]
-    [InlineData(2, "корзины")]
-    [InlineData(3, "корзины")]
-    [InlineData(5, "корзин")]
-    [InlineData(11, "корзин")]
-    [InlineData(21, "корзина")]
-    [InlineData(22, "корзины")]
-    public void Baskets_UsesRussianPluralForm(int count, string expectedNoun)
-    {
-        Assert.Equal($"{count} {expectedNoun}", RussianPlural.Baskets(count));
-    }
-
-    [Theory]
-    [InlineData(1, "день")]
-    [InlineData(3, "дня")]
-    [InlineData(5, "дней")]
-    public void Noun_UsesCustomWords(int count, string expectedNoun)
-    {
-        Assert.Equal(expectedNoun, RussianPlural.Noun(count, "день", "дня", "дней"));
+        Assert.Equal(expected, RussianPlural.Form(count));
     }
 }

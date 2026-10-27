@@ -4,6 +4,8 @@ namespace PasteHatch.Core.Tests;
 
 public sealed class MaterialNamingTests : IDisposable
 {
+    private static readonly ReswTextProvider Text = ReswTextProvider.Russian;
+
     private readonly TempDirectory _temp = new();
 
     public void Dispose() => _temp.Dispose();
@@ -11,7 +13,7 @@ public sealed class MaterialNamingTests : IDisposable
     [Fact]
     public void UniqueFileName_WhenNameIsFree_ReturnsDesiredName()
     {
-        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt");
+        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt", Text);
 
         Assert.Equal("report.txt", fileName);
     }
@@ -21,7 +23,7 @@ public sealed class MaterialNamingTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_temp.Root, "report.txt"), "existing");
 
-        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt");
+        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt", Text);
 
         Assert.Equal("report (2).txt", fileName);
     }
@@ -31,7 +33,7 @@ public sealed class MaterialNamingTests : IDisposable
     {
         Directory.CreateDirectory(Path.Combine(_temp.Root, "report.txt"));
 
-        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt");
+        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt", Text);
 
         Assert.Equal("report (2).txt", fileName);
     }
@@ -43,7 +45,7 @@ public sealed class MaterialNamingTests : IDisposable
         File.WriteAllText(Path.Combine(_temp.Root, "report (2).txt"), string.Empty);
         File.WriteAllText(Path.Combine(_temp.Root, "report (3).txt"), string.Empty);
 
-        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt");
+        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "report.txt", Text);
 
         Assert.Equal("report (4).txt", fileName);
     }
@@ -54,7 +56,7 @@ public sealed class MaterialNamingTests : IDisposable
         File.WriteAllText(Path.Combine(_temp.Root, "notes"), string.Empty);
         File.WriteAllText(Path.Combine(_temp.Root, "notes (2)"), string.Empty);
 
-        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "notes");
+        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "notes", Text);
 
         Assert.Equal("notes (3)", fileName);
     }
@@ -64,7 +66,7 @@ public sealed class MaterialNamingTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_temp.Root, "archive.tar.gz"), string.Empty);
 
-        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "archive.tar.gz");
+        var fileName = MaterialNaming.UniqueFileName(_temp.Root, "archive.tar.gz", Text);
 
         Assert.Equal("archive.tar (2).gz", fileName);
     }
@@ -72,7 +74,7 @@ public sealed class MaterialNamingTests : IDisposable
     [Fact]
     public void DefaultFileName_SanitizesFormatPartAndCombinesItWithExtension()
     {
-        var fileName = MaterialNaming.DefaultFileName(_temp.Root, "Пн, 13:02", ".txt");
+        var fileName = MaterialNaming.DefaultFileName(_temp.Root, "Пн, 13:02", ".txt", Text);
 
         Assert.Equal("Пн, 13-02.txt", fileName);
         Assert.DoesNotContain(':', fileName);
@@ -83,7 +85,7 @@ public sealed class MaterialNamingTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_temp.Root, "Пн, 13-02.txt"), string.Empty);
 
-        var fileName = MaterialNaming.DefaultFileName(_temp.Root, "Пн, 13:02", ".txt");
+        var fileName = MaterialNaming.DefaultFileName(_temp.Root, "Пн, 13:02", ".txt", Text);
 
         Assert.Equal("Пн, 13-02 (2).txt", fileName);
     }
@@ -91,7 +93,7 @@ public sealed class MaterialNamingTests : IDisposable
     [Fact]
     public void DefaultFileName_SanitizesAnyInvalidCharacterInFormatPart()
     {
-        var fileName = MaterialNaming.DefaultFileName(_temp.Root, "a:b*c?d", ".url");
+        var fileName = MaterialNaming.DefaultFileName(_temp.Root, "a:b*c?d", ".url", Text);
 
         Assert.Equal("a-b-c-d.url", fileName);
     }
@@ -165,7 +167,7 @@ public sealed class MaterialNamingTests : IDisposable
     [InlineData("LPT10", "LPT10")]
     public void ValidateRenameBase_ForValidName_ReturnsTrimmedName(string input, string expected)
     {
-        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", out var error);
+        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", Text, out var error);
 
         Assert.Equal(expected, validated);
         Assert.Null(error);
@@ -178,7 +180,7 @@ public sealed class MaterialNamingTests : IDisposable
     [InlineData("\t\r\n")]
     public void ValidateRenameBase_ForEmptyName_ReturnsNullWithError(string? input)
     {
-        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", out var error);
+        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", Text, out var error);
 
         Assert.Null(validated);
         Assert.False(string.IsNullOrWhiteSpace(error));
@@ -197,7 +199,7 @@ public sealed class MaterialNamingTests : IDisposable
     [InlineData("a|b")]
     public void ValidateRenameBase_ForInvalidFileNameCharacters_ReturnsNullWithError(string input)
     {
-        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", out var error);
+        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", Text, out var error);
 
         Assert.Null(validated);
         Assert.Contains("недопустимые символы", error);
@@ -212,7 +214,7 @@ public sealed class MaterialNamingTests : IDisposable
     public void ValidateRenameBase_ForTrailingDotOrSpace_ReturnsNullWithError(string input)
     {
         // Checked on the raw input: trailing whitespace must be reported, not silently trimmed away.
-        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", out var error);
+        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", Text, out var error);
 
         Assert.Null(validated);
         Assert.Contains("точкой", error);
@@ -232,7 +234,7 @@ public sealed class MaterialNamingTests : IDisposable
     [InlineData("lpt9")]
     public void ValidateRenameBase_ForReservedDeviceName_ReturnsNullWithError(string input)
     {
-        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", out var error);
+        var validated = MaterialNaming.ValidateRenameBase(input, ".txt", Text, out var error);
 
         Assert.Null(validated);
         Assert.Contains("служебное имя", error);
@@ -243,7 +245,7 @@ public sealed class MaterialNamingTests : IDisposable
     {
         var name = new string('я', MaterialNaming.MaxBaseNameLength);
 
-        var validated = MaterialNaming.ValidateRenameBase(name, ".txt", out var error);
+        var validated = MaterialNaming.ValidateRenameBase(name, ".txt", Text, out var error);
 
         Assert.Equal(name, validated);
         Assert.Null(error);
@@ -254,7 +256,7 @@ public sealed class MaterialNamingTests : IDisposable
     {
         var name = new string('я', MaterialNaming.MaxBaseNameLength + 1);
 
-        var validated = MaterialNaming.ValidateRenameBase(name, ".txt", out var error);
+        var validated = MaterialNaming.ValidateRenameBase(name, ".txt", Text, out var error);
 
         Assert.Null(validated);
         Assert.Contains("не должно превышать", error);
@@ -263,7 +265,7 @@ public sealed class MaterialNamingTests : IDisposable
     [Fact]
     public void ValidateRenameBase_DoesNotIncludeExtensionInResult()
     {
-        var validated = MaterialNaming.ValidateRenameBase("report", ".txt", out _);
+        var validated = MaterialNaming.ValidateRenameBase("report", ".txt", Text, out _);
 
         Assert.Equal("report", validated);
         Assert.DoesNotContain(".txt", validated);

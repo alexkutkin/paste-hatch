@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
@@ -59,11 +58,19 @@ public sealed class EntryNode : INotifyPropertyChanged
 
     public string Extension => IsFolder ? string.Empty : Path.GetExtension(Name);
 
-    public string TypeLabel => Entry.TypeLabel;
+    public string TypeLabel => Localization.Text.Get(IsFolder
+        ? "Kind_Folder"
+        : Entry.Kind switch
+        {
+            MaterialKind.Image => "Kind_Image",
+            MaterialKind.Link => "Kind_Link",
+            MaterialKind.Text => "Kind_Text",
+            _ => "Kind_File",
+        });
 
     public string SizeText => IsFolder ? string.Empty : FormatSize(Entry.Size);
 
-    public string SecondaryText => IsFolder ? "Папка" : $"{Entry.TypeLabel} · {SizeText}";
+    public string SecondaryText => IsFolder ? TypeLabel : $"{TypeLabel} · {SizeText}";
 
     public string Glyph => IsFolder
         ? "\uE8B7"
@@ -138,10 +145,10 @@ public sealed class EntryNode : INotifyPropertyChanged
     private static string FormatSize(long bytes) => bytes switch
     {
         < 0 => string.Empty,
-        < 1024 => $"{bytes} Б",
-        < 1024 * 1024 => string.Format(CultureInfo.GetCultureInfo("ru-RU"), "{0:0.#} КБ", bytes / 1024d),
-        < 1024L * 1024 * 1024 => string.Format(CultureInfo.GetCultureInfo("ru-RU"), "{0:0.#} МБ", bytes / (1024d * 1024)),
-        _ => string.Format(CultureInfo.GetCultureInfo("ru-RU"), "{0:0.#} ГБ", bytes / (1024d * 1024 * 1024)),
+        < 1024 => Localization.Text.Format("Size_Bytes", bytes),
+        < 1024 * 1024 => Localization.Text.Format("Size_KB", bytes / 1024d),
+        < 1024L * 1024 * 1024 => Localization.Text.Format("Size_MB", bytes / (1024d * 1024)),
+        _ => Localization.Text.Format("Size_GB", bytes / (1024d * 1024 * 1024)),
     };
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

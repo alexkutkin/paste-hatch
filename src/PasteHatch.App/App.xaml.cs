@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using PasteHatch.Core;
 using PasteHatch.Platform;
 
 namespace PasteHatch;
@@ -18,6 +19,9 @@ public partial class App : Application
 
     public App()
     {
+        // The language must be fixed before application resources are created, otherwise the
+        // resource context and Windows' own framework strings follow the OS display language.
+        Localization.Initialize(SettingsStore.CreateDefault().Load().Language);
         InitializeComponent();
         UnhandledException += OnUnhandledException;
     }

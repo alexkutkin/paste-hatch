@@ -7,7 +7,7 @@ Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
 if ([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'Run with powershell -STA.' }
 $repo = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $repo "src/PasteHatch.App/bin/x64/$Configuration/net9.0-windows10.0.19041.0/win-x64/PasteHatch.exe"
+$exe = Join-Path $repo "src/PasteHatch.App/bin/x64/$Configuration/net10.0-windows10.0.19041.0/win-x64/PasteHatch.exe"
 if (Get-Process PasteHatch -ErrorAction SilentlyContinue) { throw 'Exit PasteHatch through the tray first; its single-instance mutex is shared.' }
 if (!(Test-Path $exe)) { throw "Build $Configuration x64 first using scripts/build.ps1." }
 $run = Join-Path $repo ('.scratch/verify-pastehatch/' + [guid]::NewGuid().ToString('N'))
@@ -45,6 +45,19 @@ function Find-Node([string]$Name) {
             [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$Name),
             [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::TreeItem)))
 }
+function Resw([string]$Language, [string]$Key) {
+    $doc = [xml](Get-Content (Join-Path $repo "src/PasteHatch.App/Strings/$Language/Resources.resw") -Raw -Encoding UTF8)
+    ($doc.root.data | Where-Object { $_.name -eq $Key }).value
+}
+function Find-Settings([string]$Id) {
+    $script:settingsWindow.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,$Id))
+}
+function Find-SettingsItems {
+    $script:settingsWindow.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ListItem))
+}
 function Select-Node([string]$Name) {
     "ACTION select tree item $Name" | Add-Content (Join-Path $run 'actions.txt')
     $node = Find-Node $Name
@@ -77,6 +90,58 @@ try {
     Doctor
     Wait-For 'refresh button removed from toolbar' { $null -eq (Find-Control 'RefreshButton') }
     @{pid=$app.Id; started=$app.StartTime.ToString('o'); exe=$app.Path; sha256=(Get-FileHash $exe).Hash; data=$data} | ConvertTo-Json | Set-Content (Join-Path $run 'doctor.json')
+
+    # ---- Interface language: English is the default, switching is live and persisted ----------
+    $settingsPath = Join-Path $data 'settings.json'
+    $englishSettingsTitle = Resw 'en-US' 'Settings_Title'
+    $russianSettingsTitle = Resw 'ru-RU' 'Settings_Title'
+    $russianPaste = Resw 'ru-RU' 'Command_Paste'
+    $russianBaskets = Resw 'ru-RU' 'Header_Baskets'
+    $englishPaste = Resw 'en-US' 'Command_Paste'
+    Wait-For 'starts in English' {
+        (Find-Control 'PasteButton').Current.Name -eq $englishPaste -and
+        (Find-Control 'BasketsList').Current.Name -eq (Resw 'en-US' 'Header_Baskets')
+    }
+    "ACTION open settings and switch language to Russian" | Add-Content (Join-Path $run 'actions.txt')
+    (Find-Control 'MoreButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'settings command reachable' { $null -ne (Find-Control 'SettingsButton') }
+    (Find-Control 'SettingsButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $script:settingsWindow = $null
+    Wait-For 'settings window opened in English' {
+        $script:settingsWindow = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
+            [System.Windows.Automation.TreeScope]::Children,
+            [System.Windows.Automation.AndCondition]::new(
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty,[int]$app.Id),
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$englishSettingsTitle)))
+        $null -ne $script:settingsWindow -and $null -ne (Find-Settings 'LanguageCombo')
+    }
+    (Find-Settings 'LanguageCombo').GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+    Wait-For 'language options listed' { (Find-SettingsItems).Count -ge 2 }
+    $languageItems = Find-SettingsItems
+    $englishName = $languageItems[0].Current.Name
+    ($languageItems | Where-Object { $_.Current.Name -ne $englishName } | Select-Object -First 1).GetCurrentPattern(
+        [System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Wait-For 'main window switched to Russian' {
+        (Find-Control 'PasteButton').Current.Name -eq $russianPaste -and
+        (Find-Control 'BasketsList').Current.Name -eq $russianBaskets
+    }
+    Wait-For 'settings window switched to Russian' {
+        $script:settingsWindow.Current.Name -eq $russianSettingsTitle -and
+        $null -ne (Find-Settings 'LanguageCombo')
+    }
+    Wait-For 'Russian choice persisted' { (Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json).language -eq 'ru' }
+    "ACTION switch language back to English" | Add-Content (Join-Path $run 'actions.txt')
+    (Find-Settings 'LanguageCombo').GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+    Wait-For 'language options listed again' { (Find-SettingsItems).Count -ge 2 }
+    (Find-SettingsItems)[0].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Wait-For 'main window switched back to English' {
+        (Find-Control 'PasteButton').Current.Name -eq $englishPaste -and
+        (Find-Control 'BasketsList').Current.Name -eq (Resw 'en-US' 'Header_Baskets')
+    }
+    Wait-For 'English choice persisted' { (Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json).language -eq 'en' }
+    $script:settingsWindow.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
+    $script:settingsWindow = $null
+
     $basket = @(Get-ChildItem (Join-Path $data 'Baskets') -Directory)
     if ($basket.Count -ne 1) { throw 'Expected one initial basket.' }
     $basket = $basket[0].FullName

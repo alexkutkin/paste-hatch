@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'src\PasteHatch.App\PasteHatch.App.csproj'
 $runtime = if ($Platform -eq 'x64') { 'win-x64' } else { 'win-arm64' }
-$exe = Join-Path $root "src\PasteHatch.App\bin\$Platform\$Configuration\net9.0-windows10.0.19041.0\$runtime\PasteHatch.exe"
+$exe = Join-Path $root "src\PasteHatch.App\bin\$Platform\$Configuration\net10.0-windows10.0.19041.0\$runtime\PasteHatch.exe"
 
 Push-Location $root
 try {

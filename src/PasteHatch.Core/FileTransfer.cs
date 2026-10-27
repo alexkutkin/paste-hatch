@@ -3,7 +3,7 @@ namespace PasteHatch.Core;
 internal enum FileTransferIntent { Import, Copy, Move }
 
 /// <summary>Owns transfer intent, collision rules, disk operations and partial results.</summary>
-internal sealed class FileTransfer(IShellService shell)
+internal sealed class FileTransfer(IShellService shell, ITextProvider text)
 {
     private static readonly EnumerationOptions CopyEntriesOptions = new()
     {
@@ -45,7 +45,7 @@ internal sealed class FileTransfer(IShellService shell)
             {
                 var isFolder = Directory.Exists(path);
                 if (!isFolder && !File.Exists(path))
-                    throw new IOException($"Файл не найден: {path}");
+                    throw new IOException(text.Format("Error_FileNotFoundPath", path));
 
                 if (intent == FileTransferIntent.Move && SameDirectory(
                     Path.GetDirectoryName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)), target))
@@ -56,15 +56,15 @@ internal sealed class FileTransfer(IShellService shell)
                     continue;
                 }
                 if (isFolder && File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint))
-                    throw new IOException("Ссылки на папки не копируются и не перемещаются.");
+                    throw new IOException(text.Get("Error_LinkNotCopied"));
                 if (isFolder && IsSameOrInside(target, path))
-                    throw new IOException("Нельзя скопировать или переместить папку внутрь себя.");
+                    throw new IOException(text.Get("Error_FolderIntoItself"));
 
                 var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                if (name.Length == 0) throw new IOException("Нельзя переносить корень диска.");
+                if (name.Length == 0) throw new IOException(text.Get("Error_DriveRoot"));
                 var destination = Path.Combine(target, isFolder
-                    ? UniqueDirectoryName(target, name)
-                    : MaterialNaming.UniqueFileName(target, name));
+                    ? UniqueDirectoryName(target, name, text)
+                    : MaterialNaming.UniqueFileName(target, name, text));
                 if (isFolder)
                 {
                     if (intent == FileTransferIntent.Move && IsSameOrInside(path, basket))
@@ -90,22 +90,30 @@ internal sealed class FileTransfer(IShellService shell)
         }
 
         var completed = files + folders;
-        var folder = relativeTarget.Length == 0 ? "корень корзины" : relativeTarget;
+        var folder = relativeTarget.Length == 0 ? text.Get("Folder_Root") : relativeTarget;
         var status = intent switch
         {
-            FileTransferIntent.Move => completed == 0 ? "Элементы не перемещены." : completed == 1 ? $"1 элемент перемещён в «{folder}»." : $"Перемещено {RussianPlural.Items(completed)} в «{folder}».",
-            FileTransferIntent.Copy => completed == 0 ? "Элементы не скопированы." : $"Скопировано {RussianPlural.Items(completed)} в «{folder}».",
-            _ => folders > 0 ? $"Добавлено {RussianPlural.Items(completed)}." : (completed, skipped) switch
-            {
-                (0, > 0) => "Файлы уже находятся в этой корзине.",
-                (0, _) => "Материалы не добавлены.",
-                (1, 0) => "Добавлен 1 файл.",
-                (1, _) => "Добавлен 1 файл (часть файлов уже была в корзине).",
-                (_, 0) => $"Добавлено {files} {RussianPlural.Noun(files, "файл", "файла", "файлов")}.",
-                _ => $"Добавлено {files} {RussianPlural.Noun(files, "файл", "файла", "файлов")} (часть файлов уже была в корзине).",
-            },
+            FileTransferIntent.Move => completed == 0
+                ? text.Get("Status_NothingMoved")
+                : completed == 1
+                    ? text.Format("Status_OneItemMoved", folder)
+                    : text.Format("Status_ItemsMoved", text.Plural("Count_Items", completed), folder),
+            FileTransferIntent.Copy => completed == 0
+                ? text.Get("Status_NothingCopied")
+                : text.Format("Status_ItemsCopied", text.Plural("Count_Items", completed), folder),
+            _ => folders > 0
+                ? text.Format("Status_Added", text.Plural("Count_Items", completed))
+                : (completed, skipped) switch
+                {
+                    (0, > 0) => text.Get("Status_AlreadyInBasket"),
+                    (0, _) => text.Get("Status_NothingAdded"),
+                    (1, 0) => text.Get("Status_OneFileAdded"),
+                    (1, _) => text.Get("Status_OneFileAddedPartly"),
+                    (_, 0) => text.Format("Status_Added", text.Plural("Count_Files", files)),
+                    _ => text.Format("Status_AddedPartly", text.Plural("Count_Files", files)),
+                },
         };
-        if (paths.Count == 0) status = "Нет файлов для добавления.";
+        if (paths.Count == 0) status = text.Get("Status_NoFilesToAdd");
         return new TransferResult(completed, status, problems);
     }
 
@@ -121,12 +129,12 @@ internal sealed class FileTransfer(IShellService shell)
             candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static string UniqueDirectoryName(string directory, string desiredName)
+    internal static string UniqueDirectoryName(string directory, string desiredName, ITextProvider text)
     {
         var candidate = desiredName;
         for (var counter = 2; Directory.Exists(Path.Combine(directory, candidate)) || File.Exists(Path.Combine(directory, candidate)); counter++)
         {
-            if (counter > 9999) throw new IOException($"Не удалось подобрать свободное имя папки для «{desiredName}».");
+            if (counter > 9999) throw new IOException(text.Format("Error_UniqueFolderName", desiredName));
             candidate = $"{desiredName} ({counter})";
         }
         return candidate;

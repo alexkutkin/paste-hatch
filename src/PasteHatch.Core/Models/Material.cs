@@ -18,17 +18,4 @@ public sealed record Material(string FileName, string FullPath, MaterialKind Kin
     public long Size { get; init; }
 
     public DateTimeOffset Modified { get; init; }
-
-    public string TypeLabel => MaterialKindLabels.For(Kind);
-}
-
-public static class MaterialKindLabels
-{
-    public static string For(MaterialKind kind) => kind switch
-    {
-        MaterialKind.Image => "Изображение",
-        MaterialKind.Text => "Текст",
-        MaterialKind.Link => "Ссылка",
-        _ => "Файл",
-    };
 }

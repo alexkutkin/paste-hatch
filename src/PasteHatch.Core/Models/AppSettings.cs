@@ -15,10 +15,14 @@ public sealed class AppSettings
     /// <summary>Keep the window above all other windows.</summary>
     public bool AlwaysOnTop { get; set; }
 
+    /// <summary>UI language: "en" (default) or "ru".</summary>
+    public string Language { get; set; } = "en";
+
     public AppSettings Clone() => new()
     {
         StartInTray = StartInTray,
         RememberWindowPlacement = RememberWindowPlacement,
         AlwaysOnTop = AlwaysOnTop,
+        Language = Language,
     };
 }

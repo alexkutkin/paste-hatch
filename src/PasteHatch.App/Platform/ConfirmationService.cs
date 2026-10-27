@@ -7,8 +7,8 @@ namespace PasteHatch.Platform;
 /// <summary>
 /// Native Windows task dialog (<c>comctl32</c> TaskDialogIndirect) for the destructive Recycle Bin
 /// confirmations and for error reporting. The destructive choice is a custom button and is never
-/// the default; "Отмена" is both the default and the safe answer when the dialog is closed with
-/// the title-bar X or Esc, per Microsoft UX guidance for destructive actions.
+/// the default; the Cancel button is both the default and the safe answer when the dialog is
+/// closed with the title-bar X or Esc, per Microsoft UX guidance for destructive actions.
 /// </summary>
 public sealed class ConfirmationService : IConfirmationService
 {
@@ -28,22 +28,31 @@ public sealed class ConfirmationService : IConfirmationService
     /// <inheritdoc />
     public bool ConfirmRecycleBasket(string displayName, string directoryPath)
     {
-        var text = $"Корзина «{displayName}» и все её файлы будут отправлены в Корзину Windows, откуда их можно восстановить.";
-        return ConfirmRecycle(heading: "Удалить корзину?", text: text, pathToReveal: directoryPath);
+        var text = Localization.Text.Format("Confirm_DeleteBasketText", displayName);
+        return ConfirmRecycle(
+            heading: Localization.Text.Get("Confirm_DeleteBasketHeading"),
+            text: text,
+            pathToReveal: directoryPath);
     }
 
     /// <inheritdoc />
     public bool ConfirmRecycleMaterial(string displayName)
     {
-        var text = $"Файл «{displayName}» будет отправлен в Корзину Windows.";
-        return ConfirmRecycle(heading: "Удалить файл?", text: text, pathToReveal: null);
+        var text = Localization.Text.Format("Confirm_DeleteFileText", displayName);
+        return ConfirmRecycle(
+            heading: Localization.Text.Get("Confirm_DeleteFileHeading"),
+            text: text,
+            pathToReveal: null);
     }
 
     /// <inheritdoc />
     public bool ConfirmRecycleFolder(string displayName)
     {
-        var text = $"Папка «{displayName}» и всё её содержимое будут отправлены в Корзину Windows.";
-        return ConfirmRecycle(heading: "Удалить папку?", text: text, pathToReveal: null);
+        var text = Localization.Text.Format("Confirm_DeleteFolderText", displayName);
+        return ConfirmRecycle(
+            heading: Localization.Text.Get("Confirm_DeleteFolderHeading"),
+            text: text,
+            pathToReveal: null);
     }
 
     /// <inheritdoc />
@@ -53,7 +62,7 @@ public sealed class ConfirmationService : IConfirmationService
         var page = new TaskDialogPage
         {
             Caption = Caption,
-            Heading = "Ошибка",
+            Heading = Localization.Text.Get("Error_Heading"),
             Text = message,
             Icon = TaskDialogIcon.Error,
             Buttons = { TaskDialogButton.OK },
@@ -64,8 +73,8 @@ public sealed class ConfirmationService : IConfirmationService
 
     private bool ConfirmRecycle(string heading, string text, string? pathToReveal)
     {
-        var cancelButton = new TaskDialogButton("Отмена");
-        var recycleButton = new TaskDialogButton("В Корзину Windows");
+        var cancelButton = new TaskDialogButton(Localization.Text.Get("Action_Cancel"));
+        var recycleButton = new TaskDialogButton(Localization.Text.Get("Button_Recycle"));
 
         var page = new TaskDialogPage
         {
@@ -81,8 +90,8 @@ public sealed class ConfirmationService : IConfirmationService
         {
             page.Expander = new TaskDialogExpander(pathToReveal)
             {
-                CollapsedButtonText = "Показать путь",
-                ExpandedButtonText = "Скрыть путь",
+                CollapsedButtonText = Localization.Text.Get("Expander_ShowPath"),
+                ExpandedButtonText = Localization.Text.Get("Expander_HidePath"),
             };
         }
 
