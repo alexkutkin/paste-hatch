@@ -10,302 +10,311 @@
 ![WinUI 3](https://img.shields.io/badge/WinUI-3-0067C0?style=flat-square)
 ![tests](https://img.shields.io/badge/tests-301%20passing-2ea44f?style=flat-square)
 
-Лёгкая Windows-утилита, которая собирает временный контекст для локальных AI-агентов:
-файлы, папки, скриншоты, текст и ссылки раскладываются по «корзинам» — обычным папкам на диске.
-Без серверов, облака и диалогов сохранения.
+A light Windows utility that gathers temporary context for local AI agents: files,
+folders, screenshots, text and links land in "baskets" — ordinary folders on disk.
+No servers, no cloud, no save dialogs.
 
-[Возможности](#возможности) • [Установка](#установка) • [Использование](#использование) • [Данные](#где-хранятся-данные) • [Устройство](#как-устроено) • [Разработка](#разработка) • [FAQ](#faq)
+[Features](#features) • [Install](#install) • [Usage](#usage) • [Data](#where-data-lives) • [Design](#how-it-is-built) • [Development](#development) • [FAQ](#faq)
 
-![Окно PasteHatch](./docs/images/screenshot.png)
+![PasteHatch window](./docs/images/screenshot.png)
 
 </div>
 
-PasteHatch живёт в области уведомлений и открывается по щелчку на значке. Всё, что вы
-вставляете или перетаскиваете в окно, сохраняется отдельным файлом в папке активной корзины —
-эту папку можно передать локальному агенту как есть.
+PasteHatch lives in the notification area and opens on a click on its icon. Everything you
+paste or drop into the window is saved as a separate file in the active basket's folder —
+that folder can be handed to a local agent as is.
 
 > [!TIP]
-> Нажмите «Скопировать путь» на панели команд и передайте путь агенту — он прочитает
-> материалы прямо из файловой системы, без экспорта и синхронизации.
+> Press «Скопировать путь» (Copy path) on the command bar and give the path to the agent —
+> it reads the materials straight from the file system, with no export or syncing.
 
-## Возможности
+## Features
 
-- 🧺 **Корзины-папки** — каждая корзина это отдельная папка `%LOCALAPPDATA%\PasteHatch\Baskets\<UID>`;
-  путь виден в строке состояния и копируется одной кнопкой.
-- 🗂 **Рейка корзин слева** — до 10 корзин, активная подсвечена; `+` создаёт, `×` закрывает,
-  двойной щелчок переименовывает, перетаскивание меняет порядок. Корзины, названия, порядок,
-  выбранные папки и содержимое восстанавливаются после перезапуска.
-- 🌳 **Одно дерево файлов** — в центре видны и папки, и файлы; папки раскрываются по мере
-  надобности, выбранная папка запоминается для каждой корзины.
-- 📥 **Универсальная вставка** — `Ctrl+V` или кнопка «Вставить»: скриншот сохраняется как `.png`,
-  текст как `.txt`, ссылка как `.url`, файлы и папки из Проводника копируются в текущую папку.
-  Папки копируются рекурсивно, совпадения имён получают суффикс ` (2)`.
-- 🔄 **Ленивое live-обновление** — пока окно видимо, приложение слушает изменения активной
-  корзины через `FileSystemWatcher`: без опроса диска, с задержкой на пачку событий. Скрытое
-  в трей приложение ничего не слушает, `F5` остаётся резервным вариантом.
-- 🖱 **Drag & Drop** — файлы и папки можно перетащить в окно или на папку в дереве.
-- 👀 **Предпросмотр без отдельного окна** — справа видны текст `.txt`/`.md`, содержимое `.url`
-  и изображения; для остальных файлов показываются тип, размер и дата.
-- 📋 **Путь к файлу** — кнопка в панели предпросмотра и пункт контекстного меню копируют полный
-  путь выбранного файла или папки; кнопка «Скопировать путь» на панели копирует текущую папку.
-- ✏️ **Переименование** — `F2` или контекстное меню: редактируется только имя, расширение видно
-  рядом и не меняется. Папки переименовываются так же.
-- 📁 **Операции с папками** — создание (`Ctrl+Shift+N`), переименование и удаление в Корзину Windows
-  с подтверждением.
-- ↕️ **Перемещение** — файл или папку можно перетащить на другую папку; `Ctrl+X`/`Ctrl+C`/`Ctrl+V`
-  работают как в Проводнике. Сортировка обычная: сначала папки, затем файлы.
-- ✍️ **Быстрая заметка** — `Enter` в поле заметки сохраняет `.txt` с именем по дню недели и
-  времени (например `Пн, 13-02.txt`) в текущую папку, без диалога сохранения.
-- 🧹 **Безопасные действия** — удаление и закрытие корзины проходят через подтверждение и Корзину
-  Windows; переименование не меняет расширение.
-- 📌 **Трей** — обычный запуск не показывает окно; щелчок по значку показывает/скрывает его и
-  всегда поднимает на передний план, правый щелчок открывает меню.
-- ⚙️ **Настройки** — запуск в трее, запоминание положения окна и режим «поверх других окон»;
-  изменения применяются сразу.
-- 🪶 **Нативное Windows-приложение** — стандартные контролы WinUI 3 (`ListView`-рейка, `TreeView`,
-  `BreadcrumbBar`, `CommandBar`, `InfoBar`), системная тема, нативные контекстные меню и диалоги
-  подтверждения.
+- 🧺 **Baskets are folders** — every basket is a separate folder
+  `%LOCALAPPDATA%\PasteHatch\Baskets\<UID>`; the path is shown in the status bar and copied
+  with one button.
+- 🗂 **Basket rail on the left** — up to 10 baskets, the active one highlighted; `+` creates,
+  `×` closes, double click renames, dragging reorders. Baskets, their names, order, selected
+  folders and contents survive a restart.
+- 🌳 **One file tree** — folders and files together in the middle; folders expand on demand,
+  the selected folder is remembered per basket.
+- 📥 **Universal paste** — `Ctrl+V` or the «Вставить» (Paste) button: a screenshot is saved
+  as `.png`, text as `.txt`, a link as `.url`, files and folders from Explorer are copied
+  into the current folder. Folders copy recursively, name collisions get the ` (2)` suffix.
+- 🔄 **Lazy live refresh** — while the window is visible the app watches the active basket
+  through `FileSystemWatcher`: no disk polling, with a debounce on event batches. Hidden in
+  the tray the app watches nothing; `F5` remains the fallback.
+- 🖱 **Drag & Drop** — files and folders can be dropped into the window or onto a folder in
+  the tree.
+- 👀 **Preview without a separate window** — `.txt`/`.md` text, `.url` contents and images
+  show on the right; other files show type, size and date.
+- 📋 **File path** — a button in the preview bar and a context menu item copy the full path
+  of the selected file or folder; the «Скопировать путь» (Copy path) button on the bar
+  copies the current folder.
+- ✏️ **Rename** — `F2` or the context menu: only the name is edited, the extension stays
+  visible and unchanged. Folders rename the same way.
+- 📁 **Folder operations** — create (`Ctrl+Shift+N`), rename and delete to the Windows
+  Recycle Bin with confirmation.
+- ↕️ **Move** — a file or folder can be dragged onto another folder; `Ctrl+X`/`Ctrl+C`/`Ctrl+V`
+  work like in Explorer. Plain sorting: folders first, then files.
+- ✍️ **Quick note** — `Enter` in the note box saves a `.txt` named after the weekday and time
+  (e.g. `Пн, 13-02.txt`) into the current folder, with no save dialog.
+- 🧹 **Safe actions** — deleting and closing a basket ask for confirmation and use the
+  Windows Recycle Bin; rename never changes the extension.
+- 📌 **Tray** — a regular launch shows no window; clicking the icon toggles it and always
+  brings it to the front, right click opens the menu.
+- ⚙️ **Settings** — start in tray, remember window position and always-on-top; changes apply
+  immediately.
+- 🪶 **A native Windows app** — standard WinUI 3 controls (`ListView` rail, `TreeView`,
+  `BreadcrumbBar`, `CommandBar`, `InfoBar`), system theme, native context menus and
+  confirmation dialogs.
 
-## Установка
+## Install
 
-### Требования
+### Requirements
 
-- Windows 10 версии 1809+ или Windows 11 (проверено на Windows 11, сборка 26200).
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) — для сборки и запуска из
-  исходников. Windows App SDK и WinUI 3 поставляются вместе с приложением
-  (`WindowsAppSDKSelfContained`), отдельно устанавливать их не нужно.
+- Windows 10 version 1809+ or Windows 11 (verified on Windows 11, build 26200).
+- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) — to build and run from
+  sources. Windows App SDK and WinUI 3 ship with the application
+  (`WindowsAppSDKSelfContained`), no separate install needed.
 
-### Сборка и запуск
+### Build and run
 
-Самый короткий путь — готовые скрипты:
+The shortest path is the provided scripts:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # Release-сборка, печатает путь к exe
-powershell -ExecutionPolicy Bypass -File scripts\run.ps1     # сборка при необходимости и запуск
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # Release build, prints the exe path
+powershell -ExecutionPolicy Bypass -File scripts\run.ps1     # builds when needed and runs
 ```
 
-Аргумент `--show` открывает окно сразу, не дожидаясь щелчка по значку в трее. Архитектура —
-x64; при необходимости можно собрать ARM64.
+The `--show` argument opens the window right away instead of waiting for a tray click.
+Architecture is x64; ARM64 can be built if needed.
 
 <details>
-<summary>Сборка вручную (dotnet, ARM64)</summary>
+<summary>Manual build (dotnet, ARM64)</summary>
 
 ```powershell
 dotnet build src\PasteHatch.App\PasteHatch.App.csproj -c Release -p:Platform=x64
 .\src\PasteHatch.App\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\PasteHatch.exe
 ```
 
-Для ARM64 замените `Platform` на `ARM64`, а `win-x64` на `win-arm64`.
+For ARM64 replace `Platform` with `ARM64` and `win-x64` with `win-arm64`.
 
 </details>
 
-### Ярлык на рабочем столе
+### Desktop shortcut
 
-Сборка по умолчанию — framework-dependent: приложению нужен установленный **.NET 9 Desktop
-Runtime** (входит в SDK). Ярлык создаётся так:
+The default build is framework-dependent: the app needs the installed **.NET 9 Desktop
+Runtime** (part of the SDK). The shortcut is created like this:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1            # ярлык PasteHatch на рабочем столе
-powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1 -Uninstall # убрать ярлык
+powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1            # create the desktop shortcut
+powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1 -Uninstall # remove the shortcut
 ```
 
-Ярлык указывает на `src\PasteHatch.App\bin\x64\Release\...\PasteHatch.exe`; после пересборки
-цель не меняется.
+The shortcut points at `src\PasteHatch.App\bin\x64\Release\...\PasteHatch.exe`; rebuilding
+does not change the target.
 
-## Использование
+## Usage
 
-1. Запустите приложение — первый запуск открывает окно, дальше PasteHatch живёт в трее.
-2. Выберите корзину в рейке слева, затем папку в дереве файлов.
-3. Добавьте материалы: `Ctrl+V`, кнопка «Вставить», поле быстрой заметки или перетаскивание.
-4. Скопируйте путь к текущей папке кнопкой «Скопировать путь» или путь отдельного файла
-   кнопкой в панели предпросмотра — и передайте его агенту.
+1. Launch the app — the first launch opens the window, afterwards PasteHatch lives in the
+   tray.
+2. Pick a basket in the rail on the left, then a folder in the file tree.
+3. Add materials: `Ctrl+V`, the «Вставить» (Paste) button, the quick note box or drag and
+   drop.
+4. Copy the current folder path with «Скопировать путь» (Copy path) or a single file path
+   with the preview bar button — and hand it to the agent.
 
-### Горячие клавиши и жесты
+### Hotkeys and gestures
 
-| Действие | Как |
+| Action | How |
 | --- | --- |
-| Добавить содержимое буфера | `Ctrl+V` при фокусе в окне или кнопка «Вставить» |
-| Добавить файлы или папки | перетащить в окно или на папку в дереве |
-| Выбрать корзину | щелчок в рейке слева |
-| Выбрать файл или папку | щелчок в дереве |
-| Развернуть/свернуть папку | шеврон, двойной щелчок по папке или `Enter` |
-| Открыть файл | двойной щелчок по файлу или `Enter` |
-| Перейти в папку | щелчок по breadcrumb или кнопка `↑` |
-| Подняться на уровень выше | кнопка `↑` или `Alt+↑` |
-| Переименовать файл или папку | `F2` или контекстное меню |
-| Создать папку | `Ctrl+Shift+N` или кнопка «Новая папка» |
-| Скопировать путь | кнопка в предпросмотре или контекстное меню; на панели — путь текущей папки |
-| Копировать / вырезать / вставить | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
-| Переместить файл или папку | перетащить на папку |
-| Удалить файл или папку | `Delete` (с подтверждением) |
-| Обновить корзину | `F5` или кнопка «Обновить» |
-| Переименовать корзину | двойной щелчок по строке рейки, `Enter` — сохранить, `Esc` — отменить |
-| Создать/закрыть корзину | `+` в рейке / `×` на строке (с подтверждением); `Ctrl+T` / `Ctrl+W` |
-| Перейти к корзине | `Ctrl+1…8`, `Ctrl+9` — последняя |
-| Изменить порядок корзин | перетащить строку рейки или `Ctrl+Shift+↑`/`Ctrl+Shift+↓` |
-| Показать/скрыть окно | щелчок по значку в трее |
-| Свернуть в трей | закрыть окно (`×` заголовка) или `Alt+F4` |
-| Настройки | кнопка «…» на панели команд или правая кнопка по значку в трее |
-| Выйти совсем | меню трея «Выход» |
+| Add clipboard content | `Ctrl+V` with focus in the window or the «Вставить» button |
+| Add files or folders | drop into the window or onto a folder in the tree |
+| Select a basket | click in the rail on the left |
+| Select a file or folder | click in the tree |
+| Expand/collapse a folder | the chevron, double click on the folder or `Enter` |
+| Open a file | double click on the file or `Enter` |
+| Go to a folder | click a breadcrumb or the `↑` button |
+| Go one level up | the `↑` button or `Alt+↑` |
+| Rename a file or folder | `F2` or the context menu |
+| Create a folder | `Ctrl+Shift+N` or the «Новая папка» button |
+| Copy the path | the preview button or the context menu; on the bar — the current folder path |
+| Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
+| Move a file or folder | drag onto a folder |
+| Delete a file or folder | `Delete` (with confirmation) |
+| Refresh the basket | `F5` or the «Обновить» button |
+| Rename a basket | double click on the rail row, `Enter` saves, `Esc` cancels |
+| Create/close a basket | `+` in the rail / `×` on the row (with confirmation); `Ctrl+T` / `Ctrl+W` |
+| Jump to a basket | `Ctrl+1…8`, `Ctrl+9` — the last one |
+| Reorder baskets | drag a rail row or `Ctrl+Shift+↑`/`Ctrl+Shift+↓` |
+| Show/hide the window | click the tray icon |
+| Minimize to tray | close the window (title `×`) or `Alt+F4` |
+| Settings | the «…» button on the command bar or right click on the tray icon |
+| Quit | the tray menu «Выход» |
 
-### Предпросмотр и заметка
+### Preview and note
 
-Предпросмотр открывается справа и не создаёт отдельного окна. Для `.txt`, `.md` и `.url`
-показывается текст, для изображений — уменьшенная картинка, для остальных файлов — тип, размер
-и дата изменения. Текст можно выделять и копировать. Markdown и HTML показываются как исходник,
-без рендеринга; PDF и архивы встроенно не открываются — для них есть кнопка «Открыть». Большой
-текст читается только в начале, чтобы панель не подвисала.
+The preview opens on the right and creates no separate window. For `.txt`, `.md` and `.url`
+it shows the text, for images a scaled picture, for other files the type, size and
+modification date. Text can be selected and copied. Markdown and HTML are shown as source,
+without rendering; PDF and archives do not open in place — they have an «Открыть» (Open)
+button. Large text is read from the beginning only, so the panel never stalls.
 
-Пока окно видимо, приложение лениво слушает изменения активной корзины через `FileSystemWatcher`:
-без опроса диска, с задержкой на пачку событий. При скрытии в трей наблюдение выключается; `F5`
-остаётся резервным вариантом.
+While the window is visible the app lazily watches the active basket through
+`FileSystemWatcher`: OS events, no disk polling, a batch of changes becomes one refresh
+after about 0.5 s. Hiding to the tray turns the watcher off; `F5` and showing the window
+from the tray remain fallback refresh paths.
 
-Быстрая заметка сохраняется в `.txt` в текущую папку с именем по дню недели и времени. Двоеточие
-в имени файла Windows использовать нельзя, поэтому в именах файлов оно заменяется дефисом
-(`Пн, 13-02.txt`), а имя корзины остаётся `Пн, 13:02`.
+A quick note is saved as `.txt` in the current folder, named after the weekday and time.
+Windows forbids a colon in file names, so in file names it becomes a dash
+(`Пн, 13-02.txt`), while the note title keeps `Пн, 13:02`.
 
-## Где хранятся данные
+## Where data lives
 
-| Что | Где |
+| What | Where |
 | --- | --- |
-| Материалы корзин | `%LOCALAPPDATA%\PasteHatch\Baskets\<UID>\` |
-| Открытые корзины, их названия, активная корзина, выбранная папка каждой корзины, геометрия окна | `%LOCALAPPDATA%\PasteHatch\state.json` |
-| Настройки приложения | `%LOCALAPPDATA%\PasteHatch\settings.json` |
-| Корзина удалённых материалов | стандартная Корзина Windows (файлы можно восстановить) |
+| Basket materials | `%LOCALAPPDATA%\PasteHatch\Baskets\<UID>\` |
+| Open baskets, their names, active basket, each basket's selected folder, window geometry | `%LOCALAPPDATA%\PasteHatch\state.json` |
+| Application settings | `%LOCALAPPDATA%\PasteHatch\settings.json` |
+| Deleted materials | the standard Windows Recycle Bin (files can be restored) |
 
 > [!NOTE]
-> Файлы на диске — источник истины: состояние корзин восстанавливается и по `state.json`, и по
-> папкам в `Baskets`, поэтому потеря файла состояния не теряет материалы. Папка корзины названа
-> коротким UID (6 символов без похожих `I/O/0/1`), а отображаемое имя корзины хранится отдельно.
-> `state.json` версии 2 читается: старый ручной порядок материалов игнорируется, файлы остаются
-> на месте.
+> Files on disk are the source of truth: basket state restores both from `state.json` and
+> from the folders in `Baskets`, so losing the state file loses no materials. A basket
+> folder is named with a short UID (6 characters without look-alike `I/O/0/1`), while the
+> display name is stored separately. `state.json` version 2 is read: the old manual
+> material order is ignored, the files stay in place.
 
-Для автотестов путь данных можно переопределить переменной `PASTEHATCH_DATA_ROOT` (в обычной
-работе не задаётся).
+For automated tests the data path can be overridden with `PASTEHATCH_DATA_ROOT` (unset in
+normal work).
 
-## Как это устроено
+## How it is built
 
 ```
-src/PasteHatch.Core     — домен: корзины, дерево файлов, материалы, именование, превью, state.json
-src/PasteHatch.App      — WinUI 3: окно, рейка корзин, дерево файлов, предпросмотр, настройки
-src/PasteHatch.App/Platform — буфер, трей, Корзина Windows, TaskDialog, single instance, FileSystemWatcher, Win32
-tests/PasteHatch.Core.Tests — xUnit-тесты домена
-scripts                 — сборка/запуск/генерация иконки/ярлык/headless smoke-тесты
-docs                    — бриф, архитектура, принятые решения, прототип
+src/PasteHatch.Core     — domain: baskets, file tree, materials, naming, preview, state.json
+src/PasteHatch.App      — WinUI 3: window, basket rail, file tree, preview, settings
+src/PasteHatch.App/Platform — clipboard, tray, Recycle Bin, TaskDialog, single instance, FileSystemWatcher, Win32
+tests/PasteHatch.Core.Tests — xUnit domain tests
+scripts                 — build/run/icon generation/shortcut/headless smoke runs
+docs                    — brief, architecture, accepted decisions, prototype
 ```
 
-- **PasteHatch.Core** не знает про WinUI: правила (лимит 10 корзин, «последняя корзина не
-  закрывается», сортировка и обход дерева, коллизии имён, классификация типов, UID, восстановление)
-  и контракты `IClipboardReader` / `IShellService` / `IConfirmationService` / `ITabStateStore`.
-  Покрыт xUnit-тестами.
-- **PasteHatch.App/Platform** реализует контракты нативными средствами Windows: WinForms
-  `TaskDialog` / `NotifyIcon` / `Clipboard`, `Microsoft.VisualBasic.FileIO` для Корзины, Win32
-  `SetWindowPos` / `SetForegroundWindow` / монитор / pin, `Mutex` + событие для единственного
-  экземпляра, `FileSystemWatcher` для ленивого наблюдения.
-- **PasteHatch.App** — представление: стандартные контролы WinUI 3 (`ListView`-рейка,
-  `CommandBar`, `TreeView`, `BreadcrumbBar`, `TextBox`, `Image`, `InfoBar`, `MenuFlyout`) и
-  стандартный заголовок окна; системная светлая/тёмная тема; отдельное окно настроек.
+- **PasteHatch.Core** knows nothing about WinUI: the rules (the 10-basket limit, "the last
+  basket never closes", tree sorting and traversal, name collisions, type classification,
+  UID, restore) and the contracts `IClipboardReader` / `IShellService` /
+  `IConfirmationService` / `ITabStateStore`. Covered by xUnit tests.
+- **PasteHatch.App/Platform** implements the contracts with native Windows means: WinForms
+  `TaskDialog` / `NotifyIcon` / `Clipboard`, `Microsoft.VisualBasic.FileIO` for the Recycle
+  Bin, Win32 `SetWindowPos` / `SetForegroundWindow` / monitor / pin, `Mutex` + an event for
+  the single instance, `FileSystemWatcher` for lazy watching.
+- **PasteHatch.App** is the view: standard WinUI 3 controls (`ListView` rail,
+  `CommandBar`, `TreeView`, `BreadcrumbBar`, `TextBox`, `Image`, `InfoBar`, `MenuFlyout`)
+  and the standard window title bar; system light/dark theme; a separate settings window.
 
-Подробнее — [`docs/architecture-overview.md`](docs/architecture-overview.md), мотивы решений —
-[`docs/decisions.md`](docs/decisions.md).
+Details: [`docs/architecture-overview.md`](docs/architecture-overview.md), decision
+rationale: [`docs/decisions.md`](docs/decisions.md).
 
-## Разработка
+## Development
 
-### Тесты
+### Tests
 
-Юнит-тесты ядра (именование, классификация, состояние, корзины, дерево файлов, сортировка, коллизии,
-восстановление, превью):
+Core unit tests (naming, classification, state, baskets, file tree, sorting, collisions,
+restore, preview):
 
 ```powershell
 dotnet test tests\PasteHatch.Core.Tests\PasteHatch.Core.Tests.csproj
 ```
 
-Единый UI-прогон проверяет заметку, создание корзины, единственный экземпляр, дерево файлов,
-live-обновление, текстовый предпросмотр, копирование пути, вставку текста и вложенной папки,
-создание папки и сохранение текущего расположения. Сначала закройте PasteHatch через меню трея.
-Соберите Debug и Release командами выше, затем выполните:
+A single UI run verifies the note, basket creation, the single instance, the file tree,
+live refresh, text preview, path copying, text and nested folder paste, folder creation
+and saving the current location. Close PasteHatch through the tray menu first. Build Debug
+and Release with the commands above, then run:
 
 ```powershell
 powershell -STA -ExecutionPolicy Bypass -File scripts\verify.ps1
-# Для проверки Release:
+# To verify the Release build:
 powershell -STA -ExecutionPolicy Bypass -File scripts\verify.ps1 -Configuration Release
 ```
 
-Скрипт использует отдельные данные и завершает только запущенные им процессы. Окно работает
-за экраном без трея. Проверки
-используют общий буфер обмена и восстанавливают его после прогона; во время проверки не копируйте
-другие материалы. Доказательства сохраняются в `.scratch/verify-pastehatch/<GUID>/`.
-Карта покрытия и подробные инструкции: [.agents/skills/verify-pastehatch/SKILL.md](.agents/skills/verify-pastehatch/SKILL.md).
+The script uses separate data and terminates only the processes it started. The window
+works off-screen without a tray. The checks use the shared clipboard and restore it after
+the run; do not copy anything else while they run. Evidence is saved under
+`.scratch/verify-pastehatch/<GUID>/`. Coverage map and detailed instructions:
+[.agents/skills/verify-pastehatch/SKILL.md](.agents/skills/verify-pastehatch/SKILL.md).
 
 <details>
-<summary>Отладочные швы для автоматических проверок</summary>
+<summary>Debug seams for automated checks</summary>
 
-| Переменная | Назначение |
+| Variable | Purpose |
 | --- | --- |
-| `PASTEHATCH_DATA_ROOT` | изолированная папка данных вместо `%LOCALAPPDATA%\PasteHatch` |
-| `PASTEHATCH_TEST_OFFSCREEN=1` | окно за пределами экрана без активации |
-| `PASTEHATCH_TEST_NO_TRAY=1` | приложение не создаёт значок в трее |
+| `PASTEHATCH_DATA_ROOT` | an isolated data folder instead of `%LOCALAPPDATA%\PasteHatch` |
+| `PASTEHATCH_TEST_OFFSCREEN=1` | the window goes off-screen without activation |
+| `PASTEHATCH_TEST_NO_TRAY=1` | the app creates no tray icon |
 
-В обычной работе эти переменные не задаются, поэтому проверки не мешают пользователю.
+In normal work these variables are unset, so the checks never disturb the user.
 
 </details>
 
 ## FAQ
 
-### Почему после запуска не видно окна?
+### Why is no window visible after launch?
 
-PasteHatch стартует в трее. Щёлкните по значку в области уведомлений — окно появится и выйдет на
-передний план. Исключение — самый первый запуск, когда данных ещё нет: окно открывается сразу,
-чтобы приложение было легко найти. Принудительно показать окно можно аргументом `--show`.
+PasteHatch starts in the tray. Click the icon in the notification area — the window appears
+and comes to the front. The exception is the very first launch, when there is no data yet:
+the window opens right away so the app is easy to find. `--show` forces the window open.
 
-### Как передать корзину агенту?
+### How do I hand a basket to the agent?
 
-Нажмите «Скопировать путь» на панели команд или откройте папку кнопкой «Открыть папку» и передайте
-путь агенту. Материалы — обычные файлы, никакого промежуточного формата нет.
+Press «Скопировать путь» (Copy path) on the command bar or open the folder with the
+«Открыть папку» button and give the path to the agent. The materials are ordinary files,
+there is no intermediate format.
 
-### Почему порядок файлов нельзя менять вручную?
+### Why can't I reorder files by hand?
 
-В дереве используется сортировка Проводника: сначала папки, затем файлы, по имени с естественным
-порядком чисел (`file2` раньше `file10`). Ручной порядок был возможен только в плоском списке и
-мешал перетаскиванию файлов в папки, поэтому он удалён. Файлы на диске и их имена не меняются.
+The tree uses Explorer sorting: folders first, then files, by name with natural number
+order (`file2` before `file10`). Manual order was only possible in the flat list and got in
+the way of dragging files into folders, so it is gone. Files on disk and their names do not
+change.
 
-### Как обновляется дерево, если файл изменили снаружи?
+### How does the tree update when a file changes outside?
 
-Пока окно видимо, приложение лениво слушает изменения активной корзины через `FileSystemWatcher`.
-Это события ОС, без опроса диска; пачка изменений превращается в одно обновление с задержкой
-около 0,5 с. При скрытии в трей наблюдение выключается. `F5` и показ окна из трея остаются
-резервными способами обновления.
+While the window is visible the app lazily watches the active basket through
+`FileSystemWatcher`. These are OS events, no disk polling; a batch of changes becomes one
+refresh after about 0.5 s. Hiding to the tray turns the watcher off. `F5` and showing the
+window from the tray remain fallback refresh paths.
 
-### Можно ли перетащить папку?
+### Can I drop a folder?
 
-Да. Папка копируется рекурсивно в текущую папку, как в Проводнике; совпадения имён получают
-суффикс ` (2)`. Junction и symlink не разворачиваются, чтобы копирование не зациклилось.
+Yes. The folder copies recursively into the current folder like in Explorer; name
+collisions get the ` (2)` suffix. Junctions and symlinks are not expanded, so copying
+cannot loop.
 
-### Куда удаляются материалы?
+### Where do deleted materials go?
 
-В стандартную Корзину Windows, поэтому файл можно восстановить. Перед удалением приложение
-спрашивает подтверждение.
+To the standard Windows Recycle Bin, so a file can be restored. Before deleting the app
+asks for confirmation.
 
-## Известные ограничения
+## Known limitations
 
-- Последнюю корзину нельзя закрыть: приложение всегда работает с хотя бы одной корзиной.
-- Пока поддерживается одиночный выбор; множественный выбор — следующий шаг.
-- Встроенного рендеринга HTML и PDF нет: HTML показывается исходником, PDF открывается кнопкой
-  «Открыть».
-- Большой текст в предпросмотре читается только в начале (64 КБ).
-- Live-наблюдение охватывает активную корзину и работает, пока окно видимо; в трее изменений не
-  слушает.
-- Юнит-тесты покрывают домен; UI проверяется headless smoke-прогонами (окно за экраном, без трея)
-  и ручными прогонами.
-- .NET 9 — Standard Term Support: поддержка заканчивается 10.11.2026. Код не использует
-  API, привязанных к .NET 9, поэтому переход на .NET 10 LTS — замена целевой платформы
-  (`net9.0-windows10.0.19041.0` → `net10.0-windows10.0.19041.0`) после установки SDK 10.
+- The last basket cannot be closed: the app always works with at least one basket.
+- Only single selection is supported for now; multiple selection is the next step.
+- No built-in HTML or PDF rendering: HTML shows as source, PDF opens with the «Открыть»
+  button.
+- Large preview text is read from the beginning only (64 KB).
+- Live watching covers the active basket and runs while the window is visible; in the tray
+  nothing is watched.
+- Unit tests cover the domain; the UI is verified by headless smoke runs (window off-screen,
+  no tray) and manual runs.
+- .NET 9 is Standard Term Support: support ends 2026-11-10. The code uses no .NET 9-only
+  APIs, so moving to .NET 10 LTS is a target framework rename
+  (`net9.0-windows10.0.19041.0` → `net10.0-windows10.0.19041.0`) after installing SDK 10.
 
-## Ссылки
+## Links
 
-- [Бриф проекта](docs/discovery/brief.txt) — исходные требования.
-- [Архитектура](docs/architecture-overview.md) — границы и схемы C4.
-- [Принятые решения](docs/decisions.md) — почему выбраны WinUI 3, трей, подтверждения и как
-  проверялись решения.
-- [Визуальный прототип](docs/discovery/prototype/README.md) — исходный макет (только как источник
-  состава экрана; приложение использует стандартные контролы).
+- [Project brief](docs/discovery/brief.txt) — the original requirements.
+- [Architecture](docs/architecture-overview.md) — boundaries and C4 diagrams.
+- [Accepted decisions](docs/decisions.md) — why WinUI 3, tray and confirmations were
+  chosen and how the decisions were verified.
+- [Visual prototype](docs/discovery/prototype/README.md) — the original mock (as a screen
+  inventory source only; the app uses standard controls).

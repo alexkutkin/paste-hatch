@@ -1,19 +1,30 @@
-# Context Box — визуальный прототип
+# Context Box — visual prototype
 
-Прототип повторяет экран из `../screen.png` и показывает состояния, которые можно представить до разработки приложения.
+The prototype repeats the screen from `../screen.png` and shows the states that can be
+imagined before building the application.
 
-Откройте `index.html` в браузере. Для Alpine.js требуется подключение к интернету.
+Open `index.html` in a browser. Alpine.js needs an internet connection.
 
-Что можно попробовать:
+What can be tried:
 
-- переключаться между десятью вкладками и посмотреть, как выглядит заполненная панель; счётчик показывает `10/10`, а кнопка `+` отключена;
-- дважды щёлкнуть по вкладке и переименовать её, затем нажать `Enter`; новые вкладки получают имя по дню недели и времени создания;
-- посмотреть UID и путь активной корзины, затем нажать «Открыть папку»;
-- нажать `×` у вкладки и отправить корзину с папкой и файлами в Корзину Windows либо отменить действие; после этого можно создать новую корзину кнопкой `+`;
-- перезагрузить страницу и убедиться, что оставшиеся открытыми вкладки, названия и содержимое восстановились;
-- щёлкнуть по файлу, чтобы выделить его, дважды щёлкнуть для симуляции открытия в программе Windows по умолчанию, нажать `F2` или выбрать переименование в контекстном меню; контекстное меню открывается правым щелчком или `Shift+F10`, удаление — клавишей `Delete`;
-- нажать `×` рядом с файлом и подтвердить отправку в Корзину Windows либо отменить удаление;
-- ввести короткую заметку и нажать `Enter`, чтобы добавить файл `.txt` с названием по дню недели и времени;
-- свернуть окно крестиком, открыть меню симуляции трея правым щелчком и снова показать окно.
+- switch between the ten tabs and see what a full rail looks like; the counter shows
+  `10/10` and the `+` button is disabled;
+- double click a tab to rename it, then press `Enter`; new tabs get a name from the weekday
+  and creation time;
+- see the UID and path of the active basket, then press «Открыть папку» (Open folder);
+- press `×` on a tab to send the basket with its folder and files to the Windows Recycle
+  Bin or cancel; afterwards a new basket can be created with the `+` button;
+- reload the page and make sure the remaining open tabs, names and contents are restored;
+- click a file to select it, double click to simulate opening it in the default Windows
+  program, press `F2` or pick rename in the context menu; the context menu opens with a
+  right click or `Shift+F10`, deletion is the `Delete` key;
+- press `×` next to a file and confirm sending it to the Windows Recycle Bin or cancel the
+  deletion;
+- type a short note and press `Enter` to add a `.txt` file named after the weekday and time;
+- minimize the window with the cross, open the simulated tray menu with a right click and
+  show the window again.
 
-Все данные демонстрационные. Состояние прототипа сохраняется в `localStorage` браузера только для имитации восстановления между запусками; файлы в `%LOCALAPPDATA%` не создаются и не удаляются. Открытие файла и папки показывает подсказку вместо запуска Windows-программы или Проводника; работа с файлами, системный трей, вставка из буфера и перетаскивание не реализованы.
+All data is demo data. Prototype state is kept in the browser `localStorage` only to fake
+restore between launches; no files in `%LOCALAPPDATA%` are created or deleted. Opening a
+file or folder shows a tooltip instead of launching a Windows program or Explorer; file
+operations, the system tray, clipboard paste and drag & drop are not implemented.

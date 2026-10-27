@@ -1,89 +1,94 @@
-# PasteHatch — краткая архитектура
+# PasteHatch — architecture overview
 
-Схемы выведены из [брифа](discovery/brief.txt) и прототипа и соответствуют реализованному
-приложению. Стек и обоснование решений — в [decisions.md](decisions.md).
+The diagrams follow the [brief](discovery/brief.txt) and the prototype and match the
+implemented application. Stack and decision rationale: [decisions.md](decisions.md).
 
-- **Платформа:** C#/.NET 9, WinUI 3 + Windows App SDK 2.5.1 (self-contained, без установки
-  рантайма Windows App SDK), Windows 10 1809+ / Windows 11.
-- **Хранилище:** папки корзин и JSON-файл состояния в `%LOCALAPPDATA%\PasteHatch`; файловая
-  система — источник истины, `state.json` хранит порядок корзин, их названия, активную корзину,
-  выбранную папку каждой корзины и геометрию окна.
+- **Platform:** C#/.NET 9, WinUI 3 + Windows App SDK 2.5.1 (self-contained, no Windows App
+  SDK runtime install), Windows 10 1809+ / Windows 11.
+- **Storage:** basket folders and a JSON state file in `%LOCALAPPDATA%\PasteHatch`; the
+  file system is the source of truth, `state.json` keeps basket order, basket names, the
+  active basket, each basket's selected folder and window geometry.
 
-Ширина правой панели хранится в `state.json` как `previewWidth` в логических пикселях.
-Она сохраняется после завершения перетаскивания и восстанавливается при запуске;
-в узком окне отображаемая ширина ограничивается доступным местом без потери сохранённого значения.
+The right panel width is stored in `state.json` as `previewWidth` in logical pixels. It is
+saved after a drag ends and restored on startup; in a narrow window the shown width is
+clamped to the available space without losing the saved value.
 
-## Контекст системы
+## System context
 
-PasteHatch — Windows-приложение, которое собирает файлы и содержимое буфера в отдельные корзины. Пользователь и локальный AI-агент работают с этими файлами через `%LOCALAPPDATA%\PasteHatch\Baskets`.
+PasteHatch is a Windows application that gathers files and clipboard content into separate
+baskets. The user and a local AI agent work with those files through
+`%LOCALAPPDATA%\PasteHatch\Baskets`.
 
 ```mermaid
 flowchart LR
-    user((Пользователь))
+    user((User))
     app[PasteHatch<br/>Windows · C#/.NET]
-    windows[Windows<br/>буфер · трей · Проводник · Корзина · TaskDialog]
-    baskets[(Файлы корзин<br/>%LOCALAPPDATA%\PasteHatch\Baskets)]
-    state[(Состояние вкладок<br/>%LOCALAPPDATA%\PasteHatch\state.json)]
-    agent[Локальный AI-агент]
+    windows[Windows<br/>clipboard · tray · Explorer · Recycle Bin · TaskDialog]
+    baskets[(Basket files<br/>%LOCALAPPDATA%\PasteHatch\Baskets)]
+    state[(Tab state<br/>%LOCALAPPDATA%\PasteHatch\state.json)]
+    agent[Local AI agent]
 
-    user -->|создаёт корзины и добавляет материалы| app
-    app -->|показывает содержимое и путь| user
+    user -->|creates baskets and adds materials| app
+    app -->|shows contents and path| user
     app <-->|clipboard · shell · tray · recycle bin · dialogs| windows
-    app <-->|читает и сохраняет файлы| baskets
-    app <-->|восстанавливает корзины и окно| state
-    agent -->|читает переданную пользователем папку| baskets
+    app <-->|reads and writes files| baskets
+    app <-->|restores baskets and window| state
+    agent -->|reads the folder handed over by the user| baskets
 ```
 
-## Внутренние границы приложения
+## Internal application boundaries
 
 ```mermaid
 flowchart LR
-    user((Пользователь))
-    os[Windows API и Shell]
-    agent[Локальный AI-агент]
+    user((User))
+    os[Windows API and Shell]
+    agent[Local AI agent]
 
     subgraph pastehatch[PasteHatch · C#/.NET]
-        ui[PasteHatch.App<br/>WinUI 3 · окно · рейка корзин · дерево файлов<br/>breadcrumb · предпросмотр]
-        core[PasteHatch.Core<br/>корзины · дерево файлов · материалы · именование<br/>state.json · восстановление · классификация]
-        platform[PasteHatch.App/Platform<br/>буфер · трей · Корзина Windows · TaskDialog<br/>FileSystemWatcher · single instance · Win32]
+        ui[PasteHatch.App<br/>WinUI 3 · window · basket rail · file tree<br/>breadcrumb · preview]
+        core[PasteHatch.Core<br/>baskets · file tree · materials · naming<br/>state.json · restore · classification]
+        platform[PasteHatch.App/Platform<br/>clipboard · tray · Recycle Bin · TaskDialog<br/>FileSystemWatcher · single instance · Win32]
     end
 
-    baskets[(Файлы корзин<br/>%LOCALAPPDATA%\PasteHatch\Baskets)]
-    state[(Состояние вкладок<br/>%LOCALAPPDATA%\PasteHatch\state.json)]
+    baskets[(Basket files<br/>%LOCALAPPDATA%\PasteHatch\Baskets)]
+    state[(Tab state<br/>%LOCALAPPDATA%\PasteHatch\state.json)]
 
-    user -->|действия| ui
-    ui -->|команды и подписка на изменения| core
-    core <-->|чтение и запись файлов| baskets
-    core <-->|восстановление вкладок| state
-    core -->|системные операции через интерфейсы| platform
+    user -->|actions| ui
+    ui -->|commands and change subscriptions| core
+    core <-->|file reads and writes| baskets
+    core <-->|tab restore| state
+    core -->|system operations through interfaces| platform
     platform <-->|Windows API| os
-    agent -->|читает папку, переданную пользователем| baskets
+    agent -->|reads the folder handed over by the user| baskets
 ```
 
-Границы ответственности:
+Responsibility boundaries:
 
-- **Перенос файлов** сосредоточен в `FileTransfer`: импорт, явная копия и перемещение используют
-  общие проверки путей, коллизий и обработку частичного успеха. `BasketWorkspace` публикует
-  окончательный результат и хранит намерение copy/cut; окно передаёт действия пользователя.
-- **Состояние дерева** хранит `BasketTreeNavigation`: выбор и раскрытые папки относятся к UID
-  корзины, исчезнувший выбранный путь заменяется ближайшим существующим родителем.
-  WinUI строит узлы лениво и отображает breadcrumb, подготовленный навигацией.
-- **Live-обновления** координирует `WorkspaceRefreshCoordinator`: срок жизни watcher зависит от
-  видимости окна и активной корзины; устаревшие уведомления отбрасываются, ошибки вызывают повторный
-  обход. Статусные сообщения не перестраивают дерево; изменение содержимого откладывает собственные
-  уведомления диска. `IWorkspaceWatcher` реализован OS-наблюдением и управляемым тестовым вариантом.
+- **File transfer** is concentrated in `FileTransfer`: import, explicit copy and move share
+  path checks, collision handling and partial-success handling. `BasketWorkspace` publishes
+  the final result and holds the copy/cut intent; the window passes user actions through.
+- **Tree state** is held by `BasketTreeNavigation`: selection and expanded folders belong to
+  the basket UID, a vanished selected path falls back to the nearest existing parent. WinUI
+  builds nodes lazily and renders the breadcrumb prepared by the navigation.
+- **Live refresh** is coordinated by `WorkspaceRefreshCoordinator`: watcher lifetime depends
+  on window visibility and the active basket; stale notifications are dropped, errors cause
+  a re-walk. Status messages do not rebuild the tree; content changes defer their own disk
+  notifications. `IWorkspaceWatcher` is implemented by OS watching and a controllable test
+  variant.
 
-- **PasteHatch.Core** не знает про WinUI: доменные правила (лимит 10 корзин, «последняя корзина не
-  закрывается», сортировка и обход дерева, коллизии имён, классификация типов, UID, восстановление)
-  и контракты `IClipboardReader` / `IShellService` / `IConfirmationService` / `ITabStateStore`.
-  Покрыт xUnit-тестами.
-- **PasteHatch.App/Platform** реализует эти контракты нативными средствами Windows (WinForms
-  `TaskDialog`/`NotifyIcon`/`Clipboard`, `Microsoft.VisualBasic.FileIO` для Корзины, Win32
-  `SetWindowPos`/монитор/pin, `Mutex`+событие для единственного экземпляра).
-- **PasteHatch.App** — представление: стандартные контролы WinUI 3 (`ListView`-рейка, `CommandBar`,
-  `TreeView`, `BreadcrumbBar`, `TextBox`, `Image`, `InfoBar`, `MenuFlyout`) и стандартный заголовок
-  окна; системная светлая/тёмная тема; отдельное окно настроек на `ToggleSwitch`. Layout — три
-  колонки: рейка корзин, дерево файлов, предпросмотр. Пока окно видимо, `FolderWatcher` слушает
-  изменения активной корзины.
+- **PasteHatch.Core** knows nothing about WinUI: the domain rules (the 10-basket limit,
+  "the last basket never closes", tree sorting and traversal, name collisions, type
+  classification, UID, restore) and the contracts `IClipboardReader` / `IShellService` /
+  `IConfirmationService` / `ITabStateStore`. Covered by xUnit tests.
+- **PasteHatch.App/Platform** implements those contracts with native Windows means
+  (WinForms `TaskDialog`/`NotifyIcon`/`Clipboard`, `Microsoft.VisualBasic.FileIO` for the
+  Recycle Bin, Win32 `SetWindowPos`/monitor/pin, `Mutex`+event for the single instance).
+- **PasteHatch.App** is the view: standard WinUI 3 controls (`ListView` rail, `CommandBar`,
+  `TreeView`, `BreadcrumbBar`, `TextBox`, `Image`, `InfoBar`, `MenuFlyout`) and the standard
+  window title bar; system light/dark theme; a separate settings window on `ToggleSwitch`.
+  Layout is three columns: basket rail, file tree, preview. While the window is visible,
+  `FolderWatcher` listens to changes in the active basket.
 
-Схемы разделяют внешний контекст и внутренние обязанности приложения, как рекомендует C4 для обзорного уровня; дополнительные уровни добавляются, когда они помогают ответить на конкретный вопрос об архитектуре. См. [C4: виды диаграмм](https://c4model.com/diagrams).
+The diagrams separate external context from internal duties, as C4 recommends for the
+overview level; deeper levels are added when they help answer a specific architecture
+question. See [C4: diagram types](https://c4model.com/diagrams).

@@ -1,30 +1,34 @@
 # PasteHatch
 
-Корзины для файлов и содержимого буфера обмена.
+Baskets for files and clipboard content.
 
-## Термины
+## Terms
 
-**Корзина**:
-Именованное рабочее место с собственной папкой, файлами и вложенными папками.
-_Не путать_: Корзина Windows, куда отправляются удалённые элементы.
+**Basket**:
+A named workspace with its own folder, files and nested folders.
+_Do not confuse with_: the Windows Recycle Bin where deleted items go.
 
-**Материал**:
-Файл внутри корзины: текст, изображение, ссылка или другой файл. Папка материалом не является.
+**Material**:
+A file inside a basket: text, an image, a link or another file. A folder is not a material.
 
-**Текущая папка**:
-Папка, в которую направлены вставка и создание новых элементов. При выборе файла это его родительская папка.
+**Current folder**:
+The folder targeted by pasting and by creating new items. When a file is selected, it is
+that file's parent folder.
 
-**Перенос**:
-Общее название импорта, явного копирования и перемещения файлов или папок в корзину.
+**Transfer**:
+The umbrella term for import, explicit copy and move of files or folders into a basket.
 
-**Импорт**:
-Добавление внешних файлов и папок с сохранением оригинала. Элементы, уже находящиеся в этой корзине, пропускаются.
+**Import**:
+Adding external files and folders while keeping the original. Items already in this
+basket are skipped.
 
-**Явное копирование**:
-Создание ещё одной копии выбранного элемента, в том числе внутри той же корзины.
+**Explicit copy**:
+Creating one more copy of the selected item, including inside the same basket.
 
-**Перемещение**:
-Перенос элемента в другую папку с удалением исходного расположения после успешного переноса. Перемещение в ту же папку ничего не меняет.
+**Move**:
+Relocating an item to another folder, removing the source location after the move
+succeeds. Moving to the same folder changes nothing.
 
-**Состояние дерева**:
-Выбранный элемент и раскрытые папки конкретной корзины. Оно определяет текущую папку и восстанавливается при обновлении дерева и переключении корзин.
+**Tree state**:
+The selected item and the expanded folders of a basket. It defines the current folder and
+is restored on tree refresh and on basket switches.

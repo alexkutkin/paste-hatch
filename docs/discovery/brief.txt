@@ -1,40 +1,65 @@
-Ограничение - не больше 1-2 предложений на требование
+Constraint - no more than 1-2 sentences per requirement
 ---
 
-- **Локальное приложение** — лёгкая утилита для Windows, позволяющая быстро собирать временный контекст для AI-агентов без серверов и облачных сервисов.
+- **Local application** — a light Windows utility for quickly gathering temporary context
+  for AI agents, with no servers or cloud services.
 
-- **Нативная Windows-платформа** — современное приложение для Windows на C#/.NET.
+- **Native Windows platform** — a modern Windows application on C#/.NET.
 
-- **Нативные элементы интерфейса** — элементы управления являются нативными для Windows, размещаются как в прототипе и выполняют свои функции в приложении. Каждый элемент использует привычное для Windows поведение; неоднозначные решения выбираются через `prior-art-first` по официальным рекомендациям Microsoft, например по [контекстным меню](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/menus-and-context-menus).
+- **Native interface elements** — the controls are native to Windows, laid out as in the
+  prototype and doing their job in the application. Every element uses familiar Windows
+  behaviour; ambiguous choices go through `prior-art-first` on official Microsoft guidance,
+  e.g. for [context menus](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/menus-and-context-menus).
 
-- **Работа из системного трея** — при закрытии окна приложение остаётся в области уведомлений Windows; правый щелчок по значку открывает меню с командой «Показать окно».
+- **System tray work** — closing the window keeps the application in the Windows
+  notification area; right click on the icon opens a menu with a "Show window" command.
 
-- **Корзины контекста** — каждая корзина представляет собой отдельную папку в `%LOCALAPPDATA%\PasteHatch\Baskets` и содержит все добавленные материалы; путь к каталогу пользователя приложение получает через `Environment.SpecialFolder.LocalApplicationData` ([документация Microsoft](https://learn.microsoft.com/dotnet/api/system.environment.specialfolder?view=net-10.0)).
+- **Context baskets** — every basket is a separate folder in
+  `%LOCALAPPDATA%\PasteHatch\Baskets` holding all added materials; the application gets the
+  user catalog path through `Environment.SpecialFolder.LocalApplicationData`
+  ([Microsoft docs](https://learn.microsoft.com/dotnet/api/system.environment.specialfolder?view=net-10.0)).
 
-- **Вкладки** — приложение поддерживает до 10 одновременно открытых корзин; щелчок переключает вкладку, двойной щелчок позволяет изменить её название. Новая корзина получает название по сокращённому дню недели и времени создания, например `Пн, 13:02`; при следующем запуске приложения восстанавливаются оставшиеся открытыми корзины и их содержимое.
+- **Tabs** — the application supports up to 10 simultaneously open baskets; a click
+  switches the tab, a double click renames it. A new basket is named after the abbreviated
+  weekday and creation time, e.g. `Пн, 13:02`; the next launch restores the baskets that
+  stayed open and their contents.
 
-- **Управление вкладками** — пользователь может создавать и закрывать корзины, пока не достигнут лимит в 10. Перед закрытием приложение запрашивает подтверждение; подтверждённая корзина отправляется в Корзину Windows вместе с папкой и файлами, а отмена оставляет её открытой.
+- **Tab management** — the user can create and close baskets until the limit of 10 is hit.
+  Before closing the application asks for confirmation; a confirmed basket goes to the
+  Windows Recycle Bin with its folder and files, cancel keeps it open.
 
-- **Папка корзины** — каждой корзине назначается короткий UID; её путь можно просмотреть и открыть в Проводнике Windows.
+- **Basket folder** — every basket gets a short UID; its path can be viewed and opened in
+  Windows Explorer.
 
-- **Универсальная вставка** — когда окно приложения находится в фокусе, `Ctrl+V` автоматически добавляет содержимое буфера обмена в активную корзину.
+- **Universal paste** — while the application window has focus, `Ctrl+V` automatically adds
+  clipboard content to the active basket.
 
-- **Поддерживаемые данные** — скриншоты, изображения, обычный текст, ссылки и файлы. Приложение самостоятельно определяет тип содержимого и сохраняет его в подходящем формате.
+- **Supported data** — screenshots, images, plain text, links and files. The application
+  detects the content type itself and saves it in a suitable format.
 
-- **Открытие материалов** — один щелчок выделяет элемент списка, а двойной щелчок открывает его в приложении Windows по умолчанию.
+- **Opening materials** — one click selects the list item, a double click opens it in the
+  default Windows application.
 
-- **Переименование файлов** — имя файла можно изменить без изменения его расширения через контекстное меню или клавишу `F2`.
+- **Renaming files** — the file name can be changed without touching its extension through
+  the context menu or `F2`.
 
-- **Удаление материалов** — перед удалением материала приложение запрашивает подтверждение, после которого файл отправляется в Корзину Windows.
+- **Deleting materials** — before deleting a material the application asks for
+  confirmation, after which the file goes to the Windows Recycle Bin.
 
-- **Drag & Drop** — материалы можно добавлять простым перетаскиванием в окно приложения.
+- **Drag & Drop** — materials can be added by simply dragging them into the application
+  window.
 
-- **Автоматическое сохранение** — каждый добавленный элемент немедленно сохраняется отдельным файлом без диалогов, ручного выбора имени или подтверждений.
+- **Automatic save** — every added item is immediately saved as a separate file, with no
+  dialogs, manual name choice or confirmations.
 
-- **Быстрая текстовая заметка** — ввод текста и нажатие `Enter` создают файл `.txt` с именем по дню недели и времени, например `Пн, 13:02.txt`; название можно изменить, сохранив расширение.
+- **Quick text note** — typing text and pressing `Enter` creates a `.txt` file named after
+  the weekday and time, e.g. `Пн, 13:02.txt`; the name can be changed while keeping the
+  extension.
 
-- **Копирование пути** — абсолютный путь к папке активной корзины можно скопировать для передачи локальному AI-агенту.
+- **Copy path** — the absolute path of the active basket's folder can be copied to hand to
+  a local AI agent.
 
-- **Окно приложения** — приложение открывается в небольшом плавающем окне.
+- **Application window** — the application opens in a small floating window.
 
-- **Изолированность корзин** — материалы каждой вкладки сохраняются в собственной папке; вставка и создание заметок всегда относятся к активной вкладке.
+- **Basket isolation** — each tab's materials are saved in its own folder; pasting and note
+  creation always target the active tab.
