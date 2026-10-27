@@ -14,7 +14,7 @@ internal static class TestMoments
 
     public static DateTimeOffset WednesdayMorning { get; } = Local(2026, 10, 21, 9, 15);
 
-    /// <summary>Just past midnight on a Thursday; the short name must be "Чт, 00:05".</summary>
+    /// <summary>Just past midnight on a Thursday; the short name must be "Thu, 00:05".</summary>
     public static DateTimeOffset ThursdayMidnight { get; } = Local(2026, 10, 22, 0, 5);
 
     public static DateTimeOffset Local(int year, int month, int day, int hour, int minute)

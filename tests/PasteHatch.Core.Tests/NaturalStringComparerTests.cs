@@ -13,10 +13,18 @@ public sealed class NaturalStringComparerTests
     }
 
     [Fact]
-    public void Compare_IsCaseInsensitiveForText()
+    public void Compare_IgnoresLetterCase()
     {
-        Assert.True(NaturalStringComparer.Instance.Compare("Alpha", "alpha") <= 0);
-        Assert.True(NaturalStringComparer.Instance.Compare("alpha", "Alpha") >= 0);
+        // An ordinal sort would rank "alpha" after "BETA"; the natural order compares case-insensitively.
+        Assert.True(NaturalStringComparer.Instance.Compare("alpha", "BETA") < 0);
+        Assert.True(NaturalStringComparer.Instance.Compare("BETA", "alpha") > 0);
+    }
+
+    [Fact]
+    public void Compare_CaseVariants_TieBreakOnOrdinalOrder()
+    {
+        Assert.True(NaturalStringComparer.Instance.Compare("Alpha", "alpha") < 0);
+        Assert.True(NaturalStringComparer.Instance.Compare("alpha", "Alpha") > 0);
     }
 
     [Fact]
@@ -30,10 +38,9 @@ public sealed class NaturalStringComparerTests
     }
 
     [Fact]
-    public void Compare_NullAndEmptyValues_AreOrderedDeterministically()
+    public void Compare_NullSortsBeforeAnyName()
     {
         Assert.True(NaturalStringComparer.Instance.Compare(null, "a") < 0);
         Assert.True(NaturalStringComparer.Instance.Compare("a", null) > 0);
-        Assert.NotEqual(0, NaturalStringComparer.Instance.Compare("a", "A"));
     }
 }

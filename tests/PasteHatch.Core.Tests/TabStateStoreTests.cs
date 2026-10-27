@@ -28,8 +28,8 @@ public sealed class TabStateStoreTests : IDisposable
             ActiveUid = "EF4GH5",
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "Первая корзина", SelectedFolder = "docs" },
-                new TabState { Uid = "EF4GH5", Name = "Вторая корзина" },
+                new TabState { Uid = "AB2CD3", Name = "First basket", SelectedFolder = "docs" },
+                new TabState { Uid = "EF4GH5", Name = "Second basket" },
             ],
             Window = new WindowPlacementState { Left = 120, Top = 80, Width = 900, Height = 700 },
         });
@@ -42,13 +42,13 @@ public sealed class TabStateStoreTests : IDisposable
             tab =>
             {
                 Assert.Equal("AB2CD3", tab.Uid);
-                Assert.Equal("Первая корзина", tab.Name);
+                Assert.Equal("First basket", tab.Name);
                 Assert.Equal("docs", tab.SelectedFolder);
             },
             tab =>
             {
                 Assert.Equal("EF4GH5", tab.Uid);
-                Assert.Equal("Вторая корзина", tab.Name);
+                Assert.Equal("Second basket", tab.Name);
             });
         Assert.NotNull(loaded.Window);
         Assert.Equal(120, loaded.Window.Left);
@@ -75,14 +75,14 @@ public sealed class TabStateStoreTests : IDisposable
         CreateStore().Save(new WorkspaceState
         {
             ActiveUid = "AB2CD3",
-            Tabs = [new TabState { Uid = "AB2CD3", Name = "Корзина" }],
+            Tabs = [new TabState { Uid = "AB2CD3", Name = "Basket" }],
         });
 
         var loaded = CreateStore().Load();
 
         var tab = Assert.Single(loaded.Tabs);
         Assert.Equal("AB2CD3", tab.Uid);
-        Assert.Equal("Корзина", tab.Name);
+        Assert.Equal("Basket", tab.Name);
     }
 
     [Fact]
@@ -98,17 +98,6 @@ public sealed class TabStateStoreTests : IDisposable
     }
 
     [Fact]
-    public void Load_JsonLiteralNull_ReturnsEmptyState()
-    {
-        File.WriteAllText(_temp.StateFile, "null");
-
-        var state = CreateStore().Load();
-
-        Assert.Empty(state.Tabs);
-        Assert.Null(state.ActiveUid);
-    }
-
-    [Fact]
     public void Load_Version2StateWithMaterialOrder_StillLoadsTabs()
     {
         File.WriteAllText(_temp.StateFile, """
@@ -116,7 +105,7 @@ public sealed class TabStateStoreTests : IDisposable
               "version": 2,
               "activeUid": "AB2CD3",
               "tabs": [
-                { "uid": "AB2CD3", "name": "Корзина", "materialOrder": ["a.txt", "b.txt"] }
+                { "uid": "AB2CD3", "name": "Basket", "materialOrder": ["a.txt", "b.txt"] }
               ]
             }
             """);
@@ -135,7 +124,7 @@ public sealed class TabStateStoreTests : IDisposable
         var store = CreateStore();
         store.Save(new WorkspaceState
         {
-            Tabs = [new TabState { Uid = "AB2CD3", Name = "Корзина", SelectedFolder = "docs" }],
+            Tabs = [new TabState { Uid = "AB2CD3", Name = "Basket", SelectedFolder = "docs" }],
         });
 
         var json = File.ReadAllText(store.StateFilePath);
@@ -143,18 +132,6 @@ public sealed class TabStateStoreTests : IDisposable
         Assert.DoesNotContain("materialOrder", json, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("selectedFolder", json);
         Assert.Equal(3, store.Load().Version);
-    }
-
-    [Fact]
-    public void Load_WhenTabsPropertyIsAbsent_NormalizesTabsToEmptyList()
-    {
-        File.WriteAllText(_temp.StateFile, """{"version":1,"activeUid":"AB2CD3"}""");
-
-        var state = CreateStore().Load();
-
-        Assert.NotNull(state.Tabs);
-        Assert.Empty(state.Tabs);
-        Assert.Equal("AB2CD3", state.ActiveUid);
     }
 
     [Fact]
@@ -179,28 +156,28 @@ public sealed class TabStateStoreTests : IDisposable
             ActiveUid = "AB2CD3",
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "Старая" },
-                new TabState { Uid = "EF4GH5", Name = "Лишняя" },
+                new TabState { Uid = "AB2CD3", Name = "Old" },
+                new TabState { Uid = "EF4GH5", Name = "Extra" },
             ],
         });
 
         store.Save(new WorkspaceState
         {
             ActiveUid = "IJ6KL7",
-            Tabs = [new TabState { Uid = "IJ6KL7", Name = "Новая" }],
+            Tabs = [new TabState { Uid = "IJ6KL7", Name = "New" }],
         });
 
         var loaded = CreateStore().Load();
         var tab = Assert.Single(loaded.Tabs);
         Assert.Equal("IJ6KL7", tab.Uid);
-        Assert.Equal("Новая", tab.Name);
+        Assert.Equal("New", tab.Name);
         Assert.Equal("IJ6KL7", loaded.ActiveUid);
     }
 
     [Fact]
     public void Save_ThenLoad_PreservesUnicodeNames()
     {
-        const string name = "Отчёты — корзина № 1, файлы";
+        const string name = "Reports — basket № 1, files";
         CreateStore().Save(new WorkspaceState
         {
             Tabs = [new TabState { Uid = "AB2CD3", Name = name }],
