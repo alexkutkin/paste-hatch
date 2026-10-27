@@ -19,6 +19,16 @@ TestResults/
 *.trx
 coverage*.xml
 
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pfx
+*.p12
+*.key
+*.pem
+
 # OS
 Thumbs.db
 desktop.ini

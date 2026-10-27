@@ -1,4 +1,4 @@
-# Builds PasteHatch if needed and starts it, then waits for the window to appear.
+# Builds PasteHatch unless -NoBuild is set, then starts it.
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',

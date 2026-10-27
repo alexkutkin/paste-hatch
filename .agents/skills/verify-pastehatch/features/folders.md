@@ -6,7 +6,7 @@ External filesystem changes appear without refresh; the toolbar has no refresh b
 
 ## How to get to it (user POV)
 
-Hover a file or folder in the central tree to reveal Open and copy-path buttons; keyboard focus also reveals them. Select a text file for a full-height preview. Choose Вставить to import the clipboard into the current folder; choose Новая папка (also Ctrl+Shift+N) to create a folder.
+Hover a file or folder in the central tree to reveal Open and copy-path buttons; keyboard focus also reveals them. Select a text file for a full-height preview. Choose Paste to import the clipboard into the current folder; choose New folder (also Ctrl+Shift+N) to create a folder.
 
 ## Driving it with UI Automation
 

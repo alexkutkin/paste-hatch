@@ -27,7 +27,7 @@ public sealed class TabState
     /// <summary>Folder name of the basket inside the baskets root.</summary>
     public string Uid { get; set; } = string.Empty;
 
-    /// <summary>User-visible tab name; the hyphenated UID remains the on-disk identity.</summary>
+    /// <summary>User-visible tab name; the basket folder name remains the on-disk identity.</summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>

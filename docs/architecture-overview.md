@@ -3,7 +3,7 @@
 The diagrams match the implemented application. Stack and decision rationale:
 [decisions.md](decisions.md).
 
-- **Platform:** C#/.NET 9, WinUI 3 + Windows App SDK 2.5.1 (self-contained, no Windows App
+- **Platform:** C#/.NET 10, WinUI 3 + Windows App SDK runtime 2.5.1 (self-contained, no Windows App
   SDK runtime install), Windows 10 1809+ / Windows 11.
 - **Storage:** basket folders and a JSON state file in `%LOCALAPPDATA%\PasteHatch`; the
   file system is the source of truth, `state.json` keeps basket order, basket names, the
@@ -71,7 +71,9 @@ Responsibility boundaries:
   the basket UID, a vanished selected path falls back to the nearest existing parent. WinUI
   builds nodes lazily and renders the breadcrumb prepared by the navigation.
 - **Live refresh** is coordinated by `WorkspaceRefreshCoordinator`: watcher lifetime depends
-  on window visibility and the active basket; stale notifications are dropped, errors cause
+  on window visibility and the active basket. A second, nonrecursive watcher observes the
+  baskets root; visible folders copied there are adopted as baskets with their original names,
+  subject to the 10-basket limit. Stale notifications are dropped, errors cause
   a re-walk. Status messages do not rebuild the tree; content changes defer their own disk
   notifications. `IWorkspaceWatcher` is implemented by OS watching and a controllable test
   variant.
@@ -87,7 +89,7 @@ Responsibility boundaries:
   `TreeView`, `BreadcrumbBar`, `TextBox`, `Image`, `InfoBar`, `MenuFlyout`) and the standard
   window title bar; system light/dark theme; a separate settings window on `ToggleSwitch`.
   Layout is three columns: basket rail, file tree, preview. While the window is visible,
-  `FolderWatcher` listens to changes in the active basket.
+  `FolderWatcher` instances listen to changes in the active basket and the baskets root.
 
 The diagrams separate external context from internal duties, as C4 recommends for the
 overview level; deeper levels are added when they help answer a specific architecture

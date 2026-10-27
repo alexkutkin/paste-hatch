@@ -6,7 +6,7 @@ Save nonempty text as a timestamp-named .txt in the selected folder; clear input
 
 ## How to get to it (user POV)
 
-Type in Быстрая заметка at the bottom of the window, choose Добавить or press Enter.
+Type in Quick note at the bottom of the window, choose Add or press Enter.
 
 ## Driving it with UI Automation
 

@@ -43,7 +43,7 @@ $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $exe
 $shortcut.WorkingDirectory = Split-Path $exe -Parent
 $shortcut.IconLocation = $iconLocation
-$shortcut.Description = 'PasteHatch - kontekstnye korziny dlya AI-agentov'
+$shortcut.Description = 'PasteHatch - context baskets for local AI agents'
 $shortcut.WindowStyle = 1
 $shortcut.Save()
 
