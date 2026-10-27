@@ -16,6 +16,7 @@ powershell -STA -ExecutionPolicy Bypass -File scripts\verify.ps1
 ```
 
 To verify Release, use `powershell -STA -ExecutionPolicy Bypass -File scripts\verify.ps1 -Configuration Release`.
+To verify a release ZIP, extract it and pass `-ExecutablePath <extracted-PasteHatch.exe>` instead.
 The script does not build automatically. It starts from an empty GUID-specific data root. Ready means its own PID's UIA window, note input and initialized state exist. No auth or seed is needed; workspace fixtures are added later as external filesystem changes.
 
 SingleInstanceGuard uses a session-wide mutex: changing PASTEHATCH_DATA_ROOT does not permit concurrent instances. The helper refuses if PasteHatch is already running. Ask the user to exit through tray Exit; never stop their instance without authorization. Tests use the shared Windows clipboard: avoid copying during a run. The helper materializes existing clipboard formats before its first clipboard operation and restores them during cleanup; providers with unusual delayed/custom formats may not round-trip perfectly.

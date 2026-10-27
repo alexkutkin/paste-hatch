@@ -1,4 +1,7 @@
-param([ValidateSet('Debug','Release')][string]$Configuration = 'Debug')
+param(
+    [ValidateSet('Debug','Release')][string]$Configuration = 'Debug',
+    [string]$ExecutablePath
+)
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['Set-Content:Encoding'] = 'UTF8'
 $PSDefaultParameterValues['Add-Content:Encoding'] = 'UTF8'
@@ -7,7 +10,9 @@ Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
 if ([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'Run with powershell -STA.' }
 $repo = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $repo "src/PasteHatch.App/bin/x64/$Configuration/net10.0-windows10.0.19041.0/win-x64/PasteHatch.exe"
+$exe = if ($ExecutablePath) { (Resolve-Path -LiteralPath $ExecutablePath).Path } else {
+    Join-Path $repo "src/PasteHatch.App/bin/x64/$Configuration/net10.0-windows10.0.19041.0/win-x64/PasteHatch.exe"
+}
 if (Get-Process PasteHatch -ErrorAction SilentlyContinue) { throw 'Exit PasteHatch through the tray first; its single-instance mutex is shared.' }
 if (!(Test-Path $exe)) { throw "Build $Configuration x64 first using scripts/build.ps1." }
 $run = Join-Path $repo ('.scratch/verify-pastehatch/' + [guid]::NewGuid().ToString('N'))

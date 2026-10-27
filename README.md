@@ -93,6 +93,16 @@ powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1
 Use `-Uninstall` to remove the shortcut. The build scripts accept `-Platform ARM64`
 for an ARM64 build.
 
+## Release ZIP
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1
+```
+
+This builds Debug and Release, runs the tests and writes a versioned x64 ZIP to `dist/`.
+Extract the entire folder and run `PasteHatch.exe`. The ZIP includes .NET and the Windows
+App SDK, so it needs no separate runtime installation. Your baskets stay in AppData.
+
 ## Your files
 
 Data lives in `%LOCALAPPDATA%\PasteHatch`:
