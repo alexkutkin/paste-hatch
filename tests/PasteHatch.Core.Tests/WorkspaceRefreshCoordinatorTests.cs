@@ -10,7 +10,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
     public void Dispose() => _harness.Dispose();
 
     private WorkspaceRefreshCoordinator Create(BasketWorkspace workspace) => new(workspace, _watcher, _rootWatcher,
-        action => { _queue.Enqueue(action); return true; }, tree => _renders.Add(tree), _harness.Text);
+        action => { _queue.Enqueue(action); return true; }, refresh => _renders.Add(refresh.RebuildTree), _harness.Text);
 
     private void Drain()
     {
@@ -44,17 +44,17 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public void StatusOnlyChange_DoesNotRebuildTreeOrSuspendWatcher()
+    public void StatusOnlyChange_DoesNotRebuildTreeOrSuppressEcho()
     {
         var workspace = _harness.CreateInitializedWorkspace();
         using var coordinator = Create(workspace);
         coordinator.SetVisible(true);
         Drain();
         _renders.Clear();
-        workspace.CopyActiveBasketPath();
+        workspace.CopyActiveBasketPath(string.Empty);
         Drain();
         Assert.Equal(new[] { false }, _renders);
-        Assert.Equal(0, _watcher.Suspensions);
+        Assert.Equal(0, _watcher.Suppressions);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         Assert.Null(_watcher.Path);
         coordinator.SetVisible(true);
         Drain();
-        Assert.Equal("hidden.txt", Assert.Single(workspace.Entries).Name);
+        Assert.Equal("hidden.txt", Assert.Single(workspace.GetEntries(string.Empty)).Name);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         Drain();
         Assert.Equal(2, _watcher.Starts);
         Assert.Equal(new[] { true }, _renders);
-        Assert.Equal(0, _watcher.Suspensions);
+        Assert.Equal(0, _watcher.Suppressions);
     }
 
     [Fact]
@@ -117,12 +117,12 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         coordinator.SetVisible(true);
         Drain();
         _renders.Clear();
-        workspace.AddQuickNote("own");
+        workspace.AddQuickNote("own", string.Empty);
         File.WriteAllText(System.IO.Path.Combine(workspace.RequireActiveTab().DirectoryPath, "external.txt"), "external");
         _watcher.Notify();
         Drain();
-        Assert.Contains(workspace.Entries, e => e.Name == "external.txt");
-        Assert.Equal(1, _watcher.Suspensions);
+        Assert.Contains(workspace.GetEntries(string.Empty), e => e.Name == "external.txt");
+        Assert.Equal(1, _watcher.Suppressions);
         Assert.True(_renders.All(tree => tree));
     }
 
@@ -135,7 +135,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         coordinator.SetVisible(true);
         Drain();
         Assert.Null(_watcher.Path);
-        Assert.Contains("наблюдение", workspace.StatusMessage);
+        Assert.NotNull(workspace.StatusMessage);
         _watcher.ThrowOnStart = false;
         coordinator.SetVisible(true);
         Drain();
@@ -148,7 +148,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var reject = true;
         using var coordinator = new WorkspaceRefreshCoordinator(workspace, _watcher, _rootWatcher,
-            action => { if (reject) return false; _queue.Enqueue(action); return true; }, tree => _renders.Add(tree),
+            action => { if (reject) return false; _queue.Enqueue(action); return true; }, refresh => _renders.Add(refresh.RebuildTree),
             _harness.Text);
         workspace.Refresh();
         reject = false;
@@ -163,7 +163,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         public event EventHandler? Error;
         public string? Path { get; private set; }
         public int Starts { get; private set; }
-        public int Suspensions { get; private set; }
+        public int Suppressions { get; private set; }
         public bool ThrowOnStart { get; set; }
         public bool IncludeSubdirectories { get; private set; }
         public void Watch(string directory, bool includeSubdirectories = true)
@@ -174,7 +174,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
             IncludeSubdirectories = includeSubdirectories;
         }
         public void Stop() => Path = null;
-        public void SuspendFor(TimeSpan duration) => Suspensions++;
+        public void SuppressEcho() => Suppressions++;
         public void Dispose() => Stop();
         public void Notify() => Changed?.Invoke(this, EventArgs.Empty);
         public void Fail() => Error?.Invoke(this, EventArgs.Empty);

@@ -1,5 +1,10 @@
 namespace PasteHatch.Core.Tests;
 
+/// <summary>
+/// One user action must not flood the refresh coordinator, which coalesces anyway: these are burst
+/// regressions, plus the publication rules of the single publish point (errors travel as state,
+/// a declined confirmation changes nothing, and every mutation publishes).
+/// </summary>
 public sealed class BasketWorkspaceEventsTests : IDisposable
 {
     private readonly WorkspaceHarness _harness = new();
@@ -7,151 +12,97 @@ public sealed class BasketWorkspaceEventsTests : IDisposable
     public void Dispose() => _harness.Dispose();
 
     [Fact]
-    public void Initialize_RaisesChangedOnce()
+    public void Initialize_PublishesOneChange()
     {
         var workspace = _harness.CreateWorkspace();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
+        var kinds = new List<WorkspaceChangeKind>();
+        workspace.Changed += (_, change) => kinds.Add(change.Kind);
 
         workspace.Initialize();
 
-        Assert.Equal(1, changedCount);
+        Assert.Equal([WorkspaceChangeKind.View], kinds);
     }
 
     [Fact]
-    public void CreateTab_RaisesChangedOnce()
+    public void PasteText_PublishesOneChange()
     {
         var workspace = _harness.CreateInitializedWorkspace();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
+        _harness.Clipboard.Payload = PastePayload.FromText("text");
+        var kinds = new List<WorkspaceChangeKind>();
+        workspace.Changed += (_, change) => kinds.Add(change.Kind);
 
-        workspace.CreateTab();
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
 
-        Assert.Equal(1, changedCount);
+        Assert.Equal([WorkspaceChangeKind.Contents], kinds);
     }
 
     [Fact]
-    public void ActivateTab_WhenSwitchingBaskets_RaisesChangedOnce()
+    public void AddQuickNote_PublishesOneChange()
     {
         var workspace = _harness.CreateInitializedWorkspace();
-        var firstTab = workspace.RequireActiveTab();
-        workspace.CreateTab();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
+        var kinds = new List<WorkspaceChangeKind>();
+        workspace.Changed += (_, change) => kinds.Add(change.Kind);
 
-        workspace.ActivateTab(firstTab.Uid);
+        Assert.NotNull(workspace.AddQuickNote("note", string.Empty));
 
-        Assert.Equal(1, changedCount);
+        Assert.Equal([WorkspaceChangeKind.Contents], kinds);
     }
 
     [Fact]
-    public void AddFromClipboard_WhenTextIsPasted_RaisesChangedOnce()
+    public void RenameEntry_PublishesOneChange()
     {
         var workspace = _harness.CreateInitializedWorkspace();
-        _harness.Clipboard.Payload = PastePayload.FromText("текст");
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
+        _harness.Clipboard.Payload = PastePayload.FromText("text");
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
+        var material = workspace.RequireSingleFile();
+        var kinds = new List<WorkspaceChangeKind>();
+        workspace.Changed += (_, change) => kinds.Add(change.Kind);
 
-        Assert.Equal(1, workspace.AddFromClipboard());
+        Assert.True(workspace.RenameEntry(material, "renamed"));
 
-        Assert.Equal(1, changedCount);
+        Assert.Equal([WorkspaceChangeKind.Contents], kinds);
     }
 
     [Fact]
-    public void AddQuickNote_WhenNoteIsCreated_RaisesChangedOnce()
+    public void ErrorPath_PublishesTheErrorStatusOnce()
     {
         var workspace = _harness.CreateInitializedWorkspace();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
+        Directory.CreateDirectory(Path.Combine(workspace.RequireActiveTab().DirectoryPath, "sub"));
+        var kinds = new List<WorkspaceChangeKind>();
+        workspace.Changed += (_, change) => kinds.Add(change.Kind);
 
-        Assert.NotNull(workspace.AddQuickNote("заметка"));
+        Assert.Null(workspace.CreateFolder("sub", string.Empty));
 
-        Assert.Equal(1, changedCount);
+        Assert.Equal([WorkspaceChangeKind.Status], kinds);
+        workspace.RequireError();
     }
 
     [Fact]
-    public void RenameMaterial_WhenRenameSucceeds_RaisesChangedOnce()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        _harness.Clipboard.Payload = PastePayload.FromText("текст");
-        Assert.Equal(1, workspace.AddFromClipboard());
-        var material = workspace.RequireSingleMaterial();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
-
-        Assert.True(workspace.RenameMaterial(material, "переименованный"));
-
-        Assert.Equal(1, changedCount);
-    }
-
-    [Fact]
-    public void DeleteMaterial_WhenConfirmed_RaisesChangedOnce()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        _harness.Clipboard.Payload = PastePayload.FromText("текст");
-        Assert.Equal(1, workspace.AddFromClipboard());
-        var material = workspace.RequireSingleMaterial();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
-
-        Assert.True(workspace.DeleteMaterial(material));
-
-        Assert.Equal(1, changedCount);
-    }
-
-    [Fact]
-    public void CopyActiveBasketPath_RaisesChangedOnce()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
-
-        workspace.CopyActiveBasketPath();
-
-        Assert.Equal(1, changedCount);
-    }
-
-    [Fact]
-    public void CopyMaterialPath_RaisesChangedOnce()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        _harness.Clipboard.Payload = PastePayload.FromText("текст");
-        Assert.Equal(1, workspace.AddFromClipboard());
-        var material = workspace.RequireSingleMaterial();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
-
-        workspace.CopyMaterialPath(material);
-
-        Assert.Equal(1, changedCount);
-    }
-
-    [Fact]
-    public void CloseTab_WhenConfirmed_RaisesChangedOnce()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        var firstTab = workspace.RequireActiveTab();
-        workspace.CreateTab();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
-
-        Assert.True(workspace.CloseTab(firstTab.Uid));
-
-        Assert.Equal(1, changedCount);
-    }
-
-    [Fact]
-    public void CloseTab_WhenConfirmationDeclined_DoesNotRaiseChanged()
+    public void DeclinedConfirmation_PublishesNothing()
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var firstTab = workspace.RequireActiveTab();
         workspace.CreateTab();
         _harness.Confirmations.ConfirmBasketResult = false;
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
+        var kinds = new List<WorkspaceChangeKind>();
+        workspace.Changed += (_, change) => kinds.Add(change.Kind);
 
         Assert.False(workspace.CloseTab(firstTab.Uid));
 
-        Assert.Equal(0, changedCount);
+        Assert.Empty(kinds);
+    }
+
+    [Fact]
+    public void ReorderTabs_PublishesViewChange()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var first = workspace.RequireActiveTab();
+        var second = workspace.CreateAndRequireTab();
+        var kinds = new List<WorkspaceChangeKind>();
+        workspace.Changed += (_, change) => kinds.Add(change.Kind);
+
+        Assert.True(workspace.ReorderTabs([second.Uid, first.Uid]));
+
+        Assert.Equal([WorkspaceChangeKind.View], kinds);
     }
 }

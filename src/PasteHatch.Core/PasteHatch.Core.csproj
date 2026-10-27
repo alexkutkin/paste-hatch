@@ -4,4 +4,8 @@
     <RootNamespace>PasteHatch.Core</RootNamespace>
     <AssemblyName>PasteHatch.Core</AssemblyName>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Transfer rules are tested through their own seam, not past the workspace interface. -->
+    <InternalsVisibleTo Include="PasteHatch.Core.Tests" />
+  </ItemGroup>
 </Project>

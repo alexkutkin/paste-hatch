@@ -21,14 +21,6 @@ public sealed class EntryNode : INotifyPropertyChanged
     {
         Entry = entry;
         _editText = entry.IsFolder ? entry.Name : Path.GetFileNameWithoutExtension(entry.Name);
-        Material = entry.IsFolder
-            ? null
-            : new Material(entry.Name, entry.FullPath, entry.Kind)
-            {
-                RelativePath = entry.RelativePath,
-                Size = entry.Size,
-                Modified = entry.Modified,
-            };
     }
 
     public EntryNode(string name, string relativePath, string fullPath, bool isFolder, long size = 0, DateTimeOffset modified = default)
@@ -43,8 +35,6 @@ public sealed class EntryNode : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public BasketEntry Entry { get; }
-
-    public Material? Material { get; }
 
     public bool IsFolder => Entry.IsFolder;
 

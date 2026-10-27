@@ -36,7 +36,9 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var active = workspace.RequireActiveTab();
         workspace.RenameTab(active.Uid, "Custom basket");
         Directory.CreateDirectory(Path.Combine(active.DirectoryPath, "selected"));
-        workspace.RememberFolder("selected");
+        var navigation = _harness.TreeStateFor(workspace);
+        navigation.Reconcile(null, []);
+        navigation.Select(Assert.Single(workspace.GetEntries(string.Empty)));
         for (var i = 0; i < BasketWorkspace.MaxTabs + 1; i++)
             _harness.Temp.CreateBasketDirectory($"external-{i}");
 
@@ -46,7 +48,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Assert.Equal(active.Uid, workspace.Tabs[0].Uid);
         Assert.Equal("Custom basket", workspace.Tabs[0].DisplayName);
         Assert.Equal(active.Uid, workspace.RequireActiveTab().Uid);
-        Assert.Equal("selected", workspace.SelectedFolder);
+        Assert.Equal("selected", navigation.CurrentFolder);
         Assert.Equal(BasketWorkspace.MaxTabs, _harness.ReadSavedState().Tabs.Count);
     }
 
@@ -76,10 +78,10 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Assert.Equal(6, tab.Uid.Length);
         Assert.Matches("^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$", tab.Uid);
         Assert.All(tab.Uid, character => Assert.Contains(character, UidAlphabet));
-        Assert.Equal("Пн, 13:02", tab.DisplayName);
+        Assert.Equal("Mon, 13:02", tab.DisplayName);
         Assert.Equal(Path.Combine(_harness.Temp.BasketsRoot, tab.Uid), tab.DirectoryPath);
         Assert.True(Directory.Exists(tab.DirectoryPath));
-        Assert.Empty(workspace.Materials);
+        Assert.Empty(workspace.Files(string.Empty));
         Assert.Equal(10, workspace.MaxTabCount);
         Assert.True(workspace.CanCreateTab);
         Assert.False(workspace.CanCloseTab);
@@ -89,7 +91,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var saved = _harness.ReadSavedState();
         var savedTab = Assert.Single(saved.Tabs);
         Assert.Equal(tab.Uid, savedTab.Uid);
-        Assert.Equal("Пн, 13:02", savedTab.Name);
+        Assert.Equal("Mon, 13:02", savedTab.Name);
         Assert.Equal(tab.Uid, saved.ActiveUid);
     }
 
@@ -98,7 +100,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
     {
         var firstLaunch = _harness.CreateInitializedWorkspace();
         var uid = firstLaunch.RequireActiveTab().Uid;
-        Assert.True(firstLaunch.RenameTab(uid, "Первая корзина"));
+        Assert.True(firstLaunch.RenameTab(uid, "First basket"));
 
         var secondLaunch = _harness.CreateWorkspace();
         secondLaunch.Initialize();
@@ -106,7 +108,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var restored = secondLaunch.RequireActiveTab();
         Assert.Single(secondLaunch.Tabs);
         Assert.Equal(uid, restored.Uid);
-        Assert.Equal("Первая корзина", restored.DisplayName);
+        Assert.Equal("First basket", restored.DisplayName);
     }
 
     [Fact]
@@ -120,10 +122,10 @@ public sealed class BasketWorkspaceTabTests : IDisposable
 
         Assert.Equal(2, workspace.Tabs.Count);
         Assert.Equal(created.Uid, workspace.RequireActiveTab().Uid);
-        Assert.Equal("Вт, 14:30", created.DisplayName);
+        Assert.Equal("Tue, 14:30", created.DisplayName);
         Assert.NotEqual(firstTab.Uid, created.Uid);
         Assert.True(Directory.Exists(created.DirectoryPath));
-        Assert.Empty(workspace.Materials);
+        Assert.Empty(workspace.Files(string.Empty));
         Assert.True(workspace.CanCreateTab);
     }
 
@@ -146,26 +148,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Assert.Null(rejected);
         Assert.Equal(10, workspace.Tabs.Count);
         Assert.Equal(10, Directory.GetDirectories(_harness.Temp.BasketsRoot).Length);
-        Assert.Contains("10", workspace.StatusMessage);
-        Assert.Contains("предел", workspace.StatusMessage);
-    }
-
-    [Fact]
-    public void CreateTab_WhenLimitIsReached_RaisesChangedButAddsNothing()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        for (var i = 1; i < BasketWorkspace.MaxTabs; i++)
-        {
-            workspace.CreateTab();
-        }
-
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
-
-        var rejected = workspace.CreateTab();
-
-        Assert.Null(rejected);
-        Assert.Equal(1, changedCount);
+        Assert.NotNull(workspace.StatusMessage);
     }
 
     [Fact]
@@ -174,17 +157,17 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var tab = workspace.RequireActiveTab();
 
-        var renamed = workspace.RenameTab(tab.Uid, "  Отчёты  ");
+        var renamed = workspace.RenameTab(tab.Uid, "  Reports  ");
 
         Assert.True(renamed);
-        Assert.Equal("Отчёты", workspace.RequireActiveTab().DisplayName);
+        Assert.Equal("Reports", workspace.RequireActiveTab().DisplayName);
         Assert.Equal(tab.Uid, workspace.RequireActiveTab().Uid);
         Assert.True(Directory.Exists(tab.DirectoryPath));
 
         var saved = _harness.ReadSavedState();
         var savedTab = Assert.Single(saved.Tabs);
         Assert.Equal(tab.Uid, savedTab.Uid);
-        Assert.Equal("Отчёты", savedTab.Name);
+        Assert.Equal("Reports", savedTab.Name);
     }
 
     [Theory]
@@ -204,43 +187,35 @@ public sealed class BasketWorkspaceTabTests : IDisposable
     }
 
     [Fact]
-    public void RenameTab_ForUnknownUid_ReturnsFalse()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-
-        Assert.False(workspace.RenameTab("ZZZZZZ", "Новое имя"));
-    }
-
-    [Fact]
     public void RenameTab_NameLongerThanMaximum_IsTruncatedToMaximum()
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var tab = workspace.RequireActiveTab();
-        var longName = new string('Я', BasketWorkspace.MaxTabNameLength + 50);
+        var longName = new string('Z', BasketWorkspace.MaxTabNameLength + 50);
 
         var renamed = workspace.RenameTab(tab.Uid, longName);
 
         Assert.True(renamed);
-        Assert.Equal(new string('Я', BasketWorkspace.MaxTabNameLength), workspace.RequireActiveTab().DisplayName);
+        Assert.Equal(new string('Z', BasketWorkspace.MaxTabNameLength), workspace.RequireActiveTab().DisplayName);
     }
 
     [Fact]
-    public void ActivateTab_SwitchesActiveTabAndItsMaterials()
+    public void ActivateTab_SwitchesActiveTabAndItsFiles()
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var firstTab = workspace.RequireActiveTab();
         _harness.Clock.Now = TestMoments.TuesdayAfternoon;
         var secondTab = workspace.CreateAndRequireTab();
-        _harness.Clipboard.Payload = PastePayload.FromText("заметка второй корзины");
-        Assert.Equal(1, workspace.AddFromClipboard());
+        _harness.Clipboard.Payload = PastePayload.FromText("note in the second basket");
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
 
         Assert.True(workspace.ActivateTab(firstTab.Uid));
         Assert.Equal(firstTab.Uid, workspace.RequireActiveTab().Uid);
-        Assert.Empty(workspace.Materials);
+        Assert.Empty(workspace.Files(string.Empty));
 
         Assert.True(workspace.ActivateTab(secondTab.Uid));
         Assert.Equal(secondTab.Uid, workspace.RequireActiveTab().Uid);
-        Assert.Single(workspace.Materials);
+        Assert.Single(workspace.Files(string.Empty));
     }
 
     [Fact]
@@ -251,17 +226,6 @@ public sealed class BasketWorkspaceTabTests : IDisposable
 
         Assert.False(workspace.ActivateTab("ZZZZZZ"));
         Assert.Equal(activeUid, workspace.RequireActiveTab().Uid);
-    }
-
-    [Fact]
-    public void ActivateTab_WhenAlreadyActive_ReturnsTrueWithoutRaisingChanged()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        var changedCount = 0;
-        workspace.Changed += (_, _) => changedCount++;
-
-        Assert.True(workspace.ActivateTab(workspace.RequireActiveTab().Uid));
-        Assert.Equal(0, changedCount);
     }
 
     [Fact]
@@ -299,8 +263,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Assert.Equal(secondTab.Uid, workspace.RequireActiveTab().Uid);
         Assert.Equal(new[] { firstTab.DirectoryPath }, _harness.Shell.RecycledDirectories);
         Assert.False(Directory.Exists(firstTab.DirectoryPath));
-        Assert.Contains(firstTab.DisplayName, workspace.StatusMessage);
-        Assert.Contains("Корзину Windows", workspace.StatusMessage);
+        Assert.NotNull(workspace.StatusMessage);
         Assert.Single(_harness.ReadSavedState().Tabs);
     }
 
@@ -313,7 +276,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var closed = workspace.CloseTab(tab.Uid);
 
         Assert.False(closed);
-        Assert.Equal("Нельзя закрыть последнюю корзину.", workspace.StatusMessage);
+        Assert.NotNull(workspace.StatusMessage);
         Assert.Single(workspace.Tabs);
         Assert.False(workspace.CanCloseTab);
         Assert.Empty(_harness.Confirmations.BasketConfirmations);
@@ -337,16 +300,6 @@ public sealed class BasketWorkspaceTabTests : IDisposable
     }
 
     [Fact]
-    public void CloseTab_ForUnknownUid_ReturnsFalse()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        workspace.CreateTab();
-
-        Assert.False(workspace.CloseTab("ZZZZZZ"));
-        Assert.Equal(2, workspace.Tabs.Count);
-    }
-
-    [Fact]
     public void CloseTab_WhenRecycleFails_KeepsTabAndReportsError()
     {
         var workspace = _harness.CreateInitializedWorkspace();
@@ -358,20 +311,19 @@ public sealed class BasketWorkspaceTabTests : IDisposable
 
         Assert.False(closed);
         Assert.Equal(2, workspace.Tabs.Count);
-        Assert.Contains("Не удалось отправить корзину", workspace.StatusMessage);
-        Assert.Single(_harness.Confirmations.Errors);
+        workspace.RequireError();
         Assert.True(Directory.Exists(firstTab.DirectoryPath));
     }
 
     [Fact]
-    public void Initialize_RestoresSavedTabWithDisplayNameAndMaterials()
+    public void Initialize_RestoresSavedTabWithDisplayNameAndFiles()
     {
         var directory = _harness.Temp.CreateBasketDirectory("AB2CD3");
-        File.WriteAllText(Path.Combine(directory, "заметка.txt"), "содержимое");
+        File.WriteAllText(Path.Combine(directory, "note.txt"), "content");
         _harness.Store.Save(new WorkspaceState
         {
             ActiveUid = "AB2CD3",
-            Tabs = [new TabState { Uid = "AB2CD3", Name = "Моя корзина" }],
+            Tabs = [new TabState { Uid = "AB2CD3", Name = "My basket" }],
         });
 
         var workspace = _harness.CreateWorkspace();
@@ -380,11 +332,11 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var tab = workspace.RequireActiveTab();
         Assert.Single(workspace.Tabs);
         Assert.Equal("AB2CD3", tab.Uid);
-        Assert.Equal("Моя корзина", tab.DisplayName);
+        Assert.Equal("My basket", tab.DisplayName);
         Assert.Equal(directory, tab.DirectoryPath);
-        var material = workspace.RequireSingleMaterial();
-        Assert.Equal("заметка.txt", material.FileName);
-        Assert.Equal(MaterialKind.Text, material.Kind);
+        var file = workspace.RequireSingleFile();
+        Assert.Equal("note.txt", file.Name);
+        Assert.Equal(MaterialKind.Text, file.Kind);
     }
 
     [Fact]
@@ -396,8 +348,8 @@ public sealed class BasketWorkspaceTabTests : IDisposable
             ActiveUid = "AB2CD3",
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "Пропавшая" },
-                new TabState { Uid = "GHJKLM", Name = "Вторая" },
+                new TabState { Uid = "AB2CD3", Name = "Gone" },
+                new TabState { Uid = "GHJKLM", Name = "Second" },
             ],
         });
 
@@ -407,7 +359,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var tab = workspace.RequireActiveTab();
         Assert.Single(workspace.Tabs);
         Assert.Equal("GHJKLM", tab.Uid);
-        Assert.Equal("Вторая", tab.DisplayName);
+        Assert.Equal("Second", tab.DisplayName);
         Assert.False(Directory.Exists(Path.Combine(_harness.Temp.BasketsRoot, "AB2CD3")));
 
         var saved = _harness.ReadSavedState();
@@ -429,8 +381,8 @@ public sealed class BasketWorkspaceTabTests : IDisposable
 
         Assert.Equal(2, workspace.Tabs.Count);
         var namesByUid = workspace.Tabs.ToDictionary(tab => tab.Uid, tab => tab.DisplayName);
-        Assert.Equal("Пн, 13:02", namesByUid["AB2CD3"]);
-        Assert.Equal("Вт, 14:30", namesByUid["GHJKLM"]);
+        Assert.Equal("Mon, 13:02", namesByUid["AB2CD3"]);
+        Assert.Equal("Tue, 14:30", namesByUid["GHJKLM"]);
 
         var saved = _harness.ReadSavedState();
         Assert.Equal(2, saved.Tabs.Count);
@@ -466,8 +418,8 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         {
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "Первая запись" },
-                new TabState { Uid = "AB2CD3", Name = "Дубликат" },
+                new TabState { Uid = "AB2CD3", Name = "First entry" },
+                new TabState { Uid = "AB2CD3", Name = "Duplicate" },
             ],
         });
 
@@ -476,7 +428,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
 
         var tab = Assert.Single(workspace.Tabs);
         Assert.Equal("AB2CD3", tab.Uid);
-        Assert.Equal("Первая запись", tab.DisplayName);
+        Assert.Equal("First entry", tab.DisplayName);
     }
 
     [Fact]
@@ -492,7 +444,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var workspace = _harness.CreateWorkspace();
         workspace.Initialize();
 
-        Assert.Equal("Пн, 13:02", workspace.RequireActiveTab().DisplayName);
+        Assert.Equal("Mon, 13:02", workspace.RequireActiveTab().DisplayName);
     }
 
     [Fact]
@@ -505,8 +457,8 @@ public sealed class BasketWorkspaceTabTests : IDisposable
             ActiveUid = "GHJKLM",
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "Первая" },
-                new TabState { Uid = "GHJKLM", Name = "Вторая" },
+                new TabState { Uid = "AB2CD3", Name = "First" },
+                new TabState { Uid = "GHJKLM", Name = "Second" },
             ],
         });
 

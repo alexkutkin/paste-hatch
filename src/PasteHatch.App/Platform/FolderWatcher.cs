@@ -12,7 +12,11 @@ namespace PasteHatch.Platform;
 /// </summary>
 public sealed class FolderWatcher : IWorkspaceWatcher
 {
+    // Both windows are engineering tunables, not measurements: the debounce merges the burst of one
+    // operation, and the echo window lets the app's own writes settle. Perceived response stays in
+    // Nielsen's 0.1-1.0 s range where the user still feels the app is reacting immediately.
     private const int DebounceMilliseconds = 500;
+    private const int EchoWindowMilliseconds = 1000;
     private const int BufferSize = 64 * 1024;
 
     private readonly object _gate = new();
@@ -85,14 +89,15 @@ public sealed class FolderWatcher : IWorkspaceWatcher
         }
     }
 
-    /// <summary>Coalesces own and external changes until the operation has settled.</summary>
-    public void SuspendFor(TimeSpan duration)
+    /// <summary>Merges the echo of the app's own writes until they have settled.</summary>
+    public void SuppressEcho()
     {
+        var window = TimeSpan.FromMilliseconds(EchoWindowMilliseconds);
         lock (_gate)
         {
-            _suspendedUntilUtc = DateTime.UtcNow + duration;
+            _suspendedUntilUtc = DateTime.UtcNow + window;
             if (_dirty != 0)
-                _timer?.Change(duration + TimeSpan.FromMilliseconds(DebounceMilliseconds), Timeout.InfiniteTimeSpan);
+                _timer?.Change(window + TimeSpan.FromMilliseconds(DebounceMilliseconds), Timeout.InfiniteTimeSpan);
         }
     }
 
@@ -134,23 +139,30 @@ public sealed class FolderWatcher : IWorkspaceWatcher
 
     private void OnTimer(object? state)
     {
+        EventHandler? raise;
         lock (_gate)
         {
             if (_disposed || _watcher is null || state is not long generation || generation != _generation ||
                 Interlocked.Exchange(ref _dirty, 0) == 0)
                 return;
-            // Keep generation validation and publication atomic with Stop/Watch.
-            Changed?.Invoke(this, EventArgs.Empty);
+            raise = Changed;
         }
+
+        // Handlers run after the lock is released, so a subscriber can call Watch or Stop from
+        // another thread without deadlocking on this one.
+        raise?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnWatcherError(long generation)
     {
+        EventHandler? raise;
         lock (_gate)
         {
             if (_disposed || _watcher is null || generation != _generation) return;
-            Error?.Invoke(this, EventArgs.Empty);
+            raise = Error;
         }
+
+        raise?.Invoke(this, EventArgs.Empty);
     }
 
     private void DisposeWatcher()

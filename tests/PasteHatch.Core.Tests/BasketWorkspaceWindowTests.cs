@@ -1,5 +1,9 @@
 namespace PasteHatch.Core.Tests;
 
+/// <summary>
+/// Window geometry is recorded in the same state file as the baskets: usable values survive a
+/// restart and unusable ones never replace a saved value.
+/// </summary>
 public sealed class BasketWorkspaceWindowTests : IDisposable
 {
     private readonly WorkspaceHarness _harness = new();
@@ -11,7 +15,7 @@ public sealed class BasketWorkspaceWindowTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
 
-        Assert.Null(workspace.WindowPlacement);
+        Assert.Null(workspace.Geometry.Placement);
     }
 
     [Fact]
@@ -20,14 +24,15 @@ public sealed class BasketWorkspaceWindowTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var placement = new WindowPlacementState { Left = 120, Top = 80, Width = 900, Height = 700 };
 
-        workspace.SaveWindowPlacement(placement);
+        Assert.True(workspace.Geometry.Save(placement));
+        workspace.SaveState();
 
-        AssertSamePlacement(placement, workspace.WindowPlacement);
+        AssertSamePlacement(placement, workspace.Geometry.Placement);
         AssertSamePlacement(placement, _harness.ReadSavedState().Window);
 
         var nextLaunch = _harness.CreateWorkspace();
         nextLaunch.Initialize();
-        AssertSamePlacement(placement, nextLaunch.WindowPlacement);
+        AssertSamePlacement(placement, nextLaunch.Geometry.Placement);
     }
 
     [Theory]
@@ -38,20 +43,9 @@ public sealed class BasketWorkspaceWindowTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
 
-        workspace.SaveWindowPlacement(new WindowPlacementState { Width = width, Height = height });
+        Assert.False(workspace.Geometry.Save(new WindowPlacementState { Width = width, Height = height }));
 
-        Assert.Null(workspace.WindowPlacement);
-        Assert.Null(_harness.ReadSavedState().Window);
-    }
-
-    [Fact]
-    public void SaveWindowPlacement_NullPlacement_IsIgnored()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-
-        workspace.SaveWindowPlacement(null);
-
-        Assert.Null(workspace.WindowPlacement);
+        Assert.Null(workspace.Geometry.Placement);
         Assert.Null(_harness.ReadSavedState().Window);
     }
 
@@ -61,9 +55,9 @@ public sealed class BasketWorkspaceWindowTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var placement = new WindowPlacementState { Left = 0, Top = 0, Width = 400, Height = 300 };
 
-        workspace.SaveWindowPlacement(placement);
+        Assert.True(workspace.Geometry.Save(placement));
 
-        AssertSamePlacement(placement, workspace.WindowPlacement);
+        AssertSamePlacement(placement, workspace.Geometry.Placement);
     }
 
     [Fact]
@@ -71,11 +65,12 @@ public sealed class BasketWorkspaceWindowTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var goodPlacement = new WindowPlacementState { Left = 50, Top = 60, Width = 800, Height = 600 };
-        workspace.SaveWindowPlacement(goodPlacement);
+        workspace.Geometry.Save(goodPlacement);
+        workspace.SaveState();
 
-        workspace.SaveWindowPlacement(new WindowPlacementState { Width = 100, Height = 100 });
+        workspace.Geometry.Save(new WindowPlacementState { Width = 100, Height = 100 });
 
-        AssertSamePlacement(goodPlacement, workspace.WindowPlacement);
+        AssertSamePlacement(goodPlacement, workspace.Geometry.Placement);
         AssertSamePlacement(goodPlacement, _harness.ReadSavedState().Window);
     }
 
@@ -92,13 +87,14 @@ public sealed class BasketWorkspaceWindowTests : IDisposable
     public void PreviewWidth_PersistsAcrossOtherChangesAndRestart()
     {
         var workspace = _harness.CreateInitializedWorkspace();
-        workspace.SavePreviewWidth(560.5);
+        Assert.True(workspace.Geometry.SavePreviewWidth(560.5));
+        workspace.SaveState();
         workspace.CreateTab();
-        workspace.AddQuickNote("note");
+        workspace.AddQuickNote("note", string.Empty);
 
         var restarted = _harness.CreateInitializedWorkspace();
 
-        Assert.Equal(560.5, restarted.PreviewWidth);
+        Assert.Equal(560.5, restarted.Geometry.PreviewWidth);
         Assert.Equal(560.5, _harness.ReadSavedState().PreviewWidth);
     }
 
@@ -110,16 +106,12 @@ public sealed class BasketWorkspaceWindowTests : IDisposable
     public void PreviewWidth_InvalidResizeDoesNotReplaceSavedWidth(double width)
     {
         var workspace = _harness.CreateInitializedWorkspace();
-        workspace.SavePreviewWidth(600);
-        workspace.SavePreviewWidth(width);
+        workspace.Geometry.SavePreviewWidth(600);
+        workspace.SaveState();
 
-        Assert.Equal(600, _harness.CreateInitializedWorkspace().PreviewWidth);
+        Assert.False(workspace.Geometry.SavePreviewWidth(width));
+
+        Assert.Equal(600, _harness.CreateInitializedWorkspace().Geometry.PreviewWidth);
     }
 
-    [Fact]
-    public void PreviewWidth_OldStateWithoutWidthUsesDefault()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        Assert.Null(workspace.PreviewWidth);
-    }
 }

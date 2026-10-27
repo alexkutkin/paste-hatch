@@ -41,7 +41,6 @@ public sealed partial class MainWindow : Window
     private const double MinRailWidth = 160;
     private const double MinTreeWidth = 160;
     private const double MinPreviewWidth = 200;
-    private const int MaxTextPreviewCharacters = 64 * 1024;
 
     private readonly ConfirmationService _confirmations;
     private readonly ShellService _shell;
@@ -50,6 +49,7 @@ public sealed partial class MainWindow : Window
     private readonly AppWindow _appWindow;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _placementTimer;
     private readonly WorkspaceRefreshCoordinator _liveRefresh;
+    private readonly PreviewLoader _preview = new();
     private readonly ObservableCollection<BasketRow> _basketRows = new();
     private readonly List<string> _internalDragPaths = [];
 
@@ -60,6 +60,7 @@ public sealed partial class MainWindow : Window
     private readonly BasketTreeNavigation _treeNavigation;
     private string? _basketSignature;
     private string? _editingBasketUid;
+    private string? _presentedError;
     private string? _startupError;
     private bool _startupErrorReported;
     private bool _isBasketDrag;
@@ -67,7 +68,6 @@ public sealed partial class MainWindow : Window
     private bool _isExiting;
     private double _railWidth = RailWidth;
     private double _previewWidth = PreviewWidth;
-    private int _previewSequence;
     private readonly bool _testOffscreen;
     private readonly bool _testNoTray;
     private IntPtr _windowHandle = IntPtr.Zero;
@@ -97,10 +97,11 @@ public sealed partial class MainWindow : Window
             _shell,
             _confirmations,
             formatter: new TabNameFormatter(() => Localization.Culture),
-            text: Localization.Text);
+            text: Localization.Text,
+            currentFolderOf: CurrentFolderFor);
         _treeNavigation = new BasketTreeNavigation(_workspace);
         _liveRefresh = new WorkspaceRefreshCoordinator(_workspace, new FolderWatcher(), new FolderWatcher(),
-            action => DispatcherQueue.TryEnqueue(() => action()), RefreshAll, Localization.Text);
+            action => DispatcherQueue.TryEnqueue(() => action()), refresh => RefreshAll(refresh.RebuildTree), Localization.Text);
 
         ConfigureWindowShell();
 
@@ -117,7 +118,7 @@ public sealed partial class MainWindow : Window
         try
         {
             _workspace.Initialize();
-            _previewWidth = _workspace.PreviewWidth ?? PreviewWidth;
+            _previewWidth = _workspace.Geometry.PreviewWidth ?? PreviewWidth;
         }
         catch (Exception ex)
         {
@@ -130,6 +131,9 @@ public sealed partial class MainWindow : Window
 
         Localization.LanguageChanged += OnLanguageChanged;
     }
+
+    /// <summary>Tree state owns each basket's current folder; the workspace records it in the state file.</summary>
+    private string CurrentFolderFor(BasketTab tab) => _treeNavigation.FolderFor(tab.Uid);
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
@@ -295,7 +299,7 @@ public sealed partial class MainWindow : Window
         {
             var scale = NativeWindow.GetDpiScale(GetWindowHandle());
             var workingArea = NativeWindow.GetWorkingArea(GetWindowHandle());
-            var placement = _settings.RememberWindowPlacement ? _workspace.WindowPlacement : null;
+            var placement = _settings.RememberWindowPlacement ? _workspace.Geometry.Placement : null;
 
             if (placement is not null)
             {
@@ -340,13 +344,16 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            _workspace.SaveWindowPlacement(new WindowPlacementState
+            if (_workspace.Geometry.Save(new WindowPlacementState
+                {
+                    Left = position.X,
+                    Top = position.Y,
+                    Width = size.Width,
+                    Height = size.Height,
+                }))
             {
-                Left = position.X,
-                Top = position.Y,
-                Width = size.Width,
-                Height = size.Height,
-            });
+                _workspace.SaveState();
+            }
         }
         catch (Exception)
         {
@@ -417,7 +424,12 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnPreviewSplitterDragCompleted(object sender, DragCompletedEventArgs e)
-        => _workspace.SavePreviewWidth(_previewWidth);
+    {
+        if (_workspace.Geometry.SavePreviewWidth(_previewWidth))
+        {
+            _workspace.SaveState();
+        }
+    }
 
     private void OnWorkspaceSizeChanged(object sender, SizeChangedEventArgs e) => ApplyPaneWidths();
 
@@ -487,8 +499,8 @@ public sealed partial class MainWindow : Window
     private void RefreshHeader()
     {
         var tab = _workspace.ActiveTab;
-        BasketPathText.Text = tab is null ? string.Empty : _workspace.SelectedFolderPath;
-        ToolTipService.SetToolTip(BasketPathText, _workspace.SelectedFolderPath);
+        BasketPathText.Text = tab is null ? string.Empty : _treeNavigation.CurrentFolderPath;
+        ToolTipService.SetToolTip(BasketPathText, _treeNavigation.CurrentFolderPath);
         Title = tab is null ? "PasteHatch" : $"{tab.DisplayName} — PasteHatch";
 
         var hasTab = tab is not null;
@@ -512,10 +524,29 @@ public sealed partial class MainWindow : Window
             StatusInfoBar.Severity = InfoBarSeverity.Error;
             StatusInfoBar.Message = status;
             StatusInfoBar.IsOpen = true;
+            if (!string.Equals(_presentedError, status, StringComparison.Ordinal))
+            {
+                // The workspace reports errors as state; presenting one is this window's decision.
+                _presentedError = status;
+                ShowDialogError(status);
+            }
         }
         else
         {
+            _presentedError = null;
             StatusInfoBar.IsOpen = false;
+        }
+    }
+
+    private void ShowDialogError(string message)
+    {
+        try
+        {
+            _confirmations.ShowError(message);
+        }
+        catch (Exception)
+        {
+            // A broken error dialog must not take the application down.
         }
     }
 
@@ -699,7 +730,7 @@ public sealed partial class MainWindow : Window
         {
             if (_workspace.ActivateTab(row.Uid))
             {
-                _workspace.OpenActiveBasketFolder();
+                _workspace.OpenActiveBasketFolder(_treeNavigation.FolderFor(row.Uid));
             }
         };
 
@@ -804,8 +835,7 @@ public sealed partial class MainWindow : Window
 
     private void RefreshTree()
     {
-        _treeNavigation.Capture(_selectedNode?.Entry, CollectExpandedPaths());
-        var view = _treeNavigation.Restore();
+        var view = _treeNavigation.Reconcile(_selectedNode?.Entry, CollectExpandedPaths());
         FileTree.RootNodes.Clear();
 
         var tab = _workspace.ActiveTab;
@@ -968,8 +998,8 @@ public sealed partial class MainWindow : Window
     {
         _treeNavigation.Select(_selectedNode?.Entry);
         var folder = CurrentFolder;
-        BasketPathText.Text = _workspace.SelectedFolderPath;
-        ToolTipService.SetToolTip(BasketPathText, _workspace.SelectedFolderPath);
+        BasketPathText.Text = _treeNavigation.CurrentFolderPath;
+        ToolTipService.SetToolTip(BasketPathText, _treeNavigation.CurrentFolderPath);
         UpButton.IsEnabled = folder.Length > 0;
         FileCountText.Text = Localization.Text.Plural("Count_Items", CurrentFolderItemCount());
 
@@ -1047,9 +1077,9 @@ public sealed partial class MainWindow : Window
         {
             node.IsExpanded = !node.IsExpanded;
         }
-        else if (entry.Material is not null)
+        else
         {
-            _workspace.OpenMaterial(entry.Material);
+            _workspace.OpenEntry(entry.Entry);
         }
     }
 
@@ -1130,9 +1160,9 @@ public sealed partial class MainWindow : Window
                 {
                     selectedNode.IsExpanded = !selectedNode.IsExpanded;
                 }
-                else if (_selectedNode.Material is not null)
+                else
                 {
-                    _workspace.OpenMaterial(_selectedNode.Material);
+                    _workspace.OpenEntry(_selectedNode.Entry);
                 }
 
                 break;
@@ -1173,9 +1203,9 @@ public sealed partial class MainWindow : Window
             {
                 selectedNode.IsExpanded = !selectedNode.IsExpanded;
             }
-            else if (node.Material is not null)
+            else
             {
-                _workspace.OpenMaterial(node.Material);
+                _workspace.OpenEntry(node.Entry);
             }
         };
 
@@ -1184,11 +1214,11 @@ public sealed partial class MainWindow : Window
         {
             if (node.IsFolder)
             {
-                _workspace.OpenFolderInExplorer(node.Entry);
+                _workspace.OpenEntry(node.Entry);
             }
             else
             {
-                _workspace.OpenActiveBasketFolder();
+                _workspace.OpenActiveBasketFolder(CurrentFolder);
             }
         };
 
@@ -1250,14 +1280,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (node.IsFolder)
-        {
-            _workspace.DeleteFolder(node.Entry);
-        }
-        else if (node.Material is not null)
-        {
-            _workspace.DeleteMaterial(node.Material);
-        }
+        _workspace.DeleteEntry(node.Entry);
     }
 
     private void BeginNodeRename(EntryNode node)
@@ -1335,11 +1358,7 @@ public sealed partial class MainWindow : Window
 
     private void CommitNodeRename(EntryNode node)
     {
-        var success = node.IsFolder
-            ? _workspace.RenameFolder(node.Entry, node.EditText)
-            : node.Material is not null && _workspace.RenameMaterial(node.Material, node.EditText);
-
-        if (!success)
+        if (!_workspace.RenameEntry(node.Entry, node.EditText))
         {
             node.EndEdit();
         }
@@ -1349,7 +1368,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowPreview(EntryNode? node)
     {
-        _previewSequence++;
+        _preview.Cancel();
         PreviewImage.Source = null;
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewText.Text = string.Empty;
@@ -1378,61 +1397,42 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (node.Entry.Kind == MaterialKind.Image)
+        if (node.Entry.Kind is not (MaterialKind.Image or MaterialKind.Text or MaterialKind.Link))
         {
-            _ = LoadPreviewImageAsync(node.FullPath, _previewSequence);
+            PreviewPlaceholder.Text = Localization.Text.Get("Preview_Unsupported");
             return;
         }
 
-        if (node.Entry.Kind is MaterialKind.Text or MaterialKind.Link)
-        {
-            try
-            {
-                var text = MaterialPreview.ReadText(node.FullPath, MaxTextPreviewCharacters);
-                if (text.Length == MaxTextPreviewCharacters)
-                {
-                    text += Environment.NewLine + "…";
-                }
-
-                PreviewText.Text = text;
-                PreviewText.Visibility = Visibility.Visible;
-                PreviewPlaceholder.Visibility = Visibility.Collapsed;
-            }
-            catch (Exception ex)
-            {
-                PreviewPlaceholder.Text = Localization.Text.Format("Preview_ReadError", ex.Message);
-            }
-        }
-        else
-        {
-            PreviewPlaceholder.Text = Localization.Text.Get("Preview_Unsupported");
-        }
+        _ = LoadPreviewAsync(node);
     }
 
-    private async Task LoadPreviewImageAsync(string path, int sequence)
+    private async Task LoadPreviewAsync(EntryNode node)
     {
         try
         {
-            var file = await StorageFile.GetFileFromPathAsync(path);
-            using var stream = await file.OpenReadAsync();
-            var bitmap = new BitmapImage { DecodePixelWidth = 480 };
-            await bitmap.SetSourceAsync(stream);
-
-            if (sequence != _previewSequence)
+            var content = await _preview.LoadAsync(node.FullPath, node.Entry.Kind);
+            if (content is null)
             {
                 return;
             }
 
-            PreviewImage.Source = bitmap;
-            PreviewImage.Visibility = Visibility.Visible;
+            if (content.Image is not null)
+            {
+                PreviewImage.Source = content.Image;
+                PreviewImage.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                PreviewText.Text = content.Text ?? string.Empty;
+                PreviewText.Visibility = Visibility.Visible;
+            }
+
             PreviewPlaceholder.Visibility = Visibility.Collapsed;
         }
         catch (Exception ex)
         {
-            if (sequence == _previewSequence)
-            {
-                PreviewPlaceholder.Text = Localization.Text.Format("Preview_ImageError", ex.Message);
-            }
+            PreviewPlaceholder.Text = Localization.Text.Format(
+                node.Entry.Kind == MaterialKind.Image ? "Preview_ImageError" : "Preview_ReadError", ex.Message);
         }
     }
 
@@ -1506,8 +1506,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _workspace.RememberFolder(CurrentFolder);
-        if (_workspace.AddQuickNote(text) is not null)
+        if (_workspace.AddQuickNote(text, CurrentFolder) is not null)
         {
             QuickNoteTextBox.Text = string.Empty;
         }
@@ -1530,9 +1529,8 @@ public sealed partial class MainWindow : Window
 
     private void CreateNewFolder()
     {
-        _workspace.RememberFolder(CurrentFolder);
         var folder = _workspace.CreateFolder(
-            Localization.Text.Get("Default_NewFolderName"), ensureUnique: true);
+            Localization.Text.Get("Default_NewFolderName"), CurrentFolder, ensureUnique: true);
         if (folder is null)
         {
             return;
@@ -1560,16 +1558,10 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnOpenFolderClick(object sender, RoutedEventArgs e)
-    {
-        _workspace.RememberFolder(CurrentFolder);
-        _workspace.OpenActiveBasketFolder();
-    }
+        => _workspace.OpenActiveBasketFolder(CurrentFolder);
 
     private void OnCopyPathClick(object sender, RoutedEventArgs e)
-    {
-        _workspace.RememberFolder(CurrentFolder);
-        _workspace.CopyActiveBasketPath();
-    }
+        => _workspace.CopyActiveBasketPath(CurrentFolder);
 
     // ---- Drag and drop -----------------------------------------------------------------
 

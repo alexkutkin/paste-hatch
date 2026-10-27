@@ -10,6 +10,7 @@ namespace PasteHatch.Core.Tests;
 internal sealed class WorkspaceHarness : IDisposable
 {
     private readonly List<BasketWorkspace> _workspaces = [];
+    private readonly Dictionary<BasketWorkspace, BasketTreeNavigation> _treeStates = new();
 
     public WorkspaceHarness()
     {
@@ -27,14 +28,15 @@ internal sealed class WorkspaceHarness : IDisposable
 
     public FakeConfirmationService Confirmations { get; } = new();
 
-    public ReswTextProvider Text { get; } = ReswTextProvider.Russian;
+    public ReswTextProvider Text { get; } = ReswTextProvider.English;
 
     public TabStateStore Store { get; }
 
     /// <summary>Creates a workspace without calling <see cref="BasketWorkspace.Initialize"/>.</summary>
     public BasketWorkspace CreateWorkspace()
     {
-        var workspace = new BasketWorkspace(
+        BasketWorkspace? workspace = null;
+        workspace = new BasketWorkspace(
             Temp.BasketsRoot,
             Store,
             Clipboard,
@@ -42,9 +44,22 @@ internal sealed class WorkspaceHarness : IDisposable
             Confirmations,
             Clock,
             new TabNameFormatter(Text.Culture),
-            Text);
+            Text,
+            currentFolderOf: tab => TreeStateFor(workspace!).FolderFor(tab.Uid));
         _workspaces.Add(workspace);
         return workspace;
+    }
+
+    /// <summary>Tree state of a workspace, created on demand and wired as its folder source.</summary>
+    public BasketTreeNavigation TreeStateFor(BasketWorkspace workspace)
+    {
+        if (!_treeStates.TryGetValue(workspace, out var treeState))
+        {
+            treeState = new BasketTreeNavigation(workspace);
+            _treeStates[workspace] = treeState;
+        }
+
+        return treeState;
     }
 
     public BasketWorkspace CreateInitializedWorkspace()
@@ -69,8 +84,24 @@ internal static class WorkspaceAssertions
     public static BasketTab CreateAndRequireTab(this BasketWorkspace workspace)
         => workspace.CreateTab() ?? throw new InvalidOperationException("Expected a new basket tab to be created.");
 
-    public static Material RequireSingleMaterial(this BasketWorkspace workspace)
-        => Assert.Single(workspace.Materials);
+    /// <summary>The file entries of a folder in the active basket, folders excluded.</summary>
+    public static IReadOnlyList<BasketEntry> Files(this BasketWorkspace workspace, string? relativeFolder)
+        => workspace.GetEntries(relativeFolder).Where(entry => !entry.IsFolder).ToList();
+
+    /// <summary>Subfolder entries of a folder in the active basket.</summary>
+    public static IReadOnlyList<BasketEntry> Folders(this BasketWorkspace workspace, string? relativeFolder)
+        => workspace.GetEntries(relativeFolder).Where(entry => entry.IsFolder).ToList();
+
+    /// <summary>The one file entry of the basket root; fails when there is not exactly one.</summary>
+    public static BasketEntry RequireSingleFile(this BasketWorkspace workspace)
+        => Assert.Single(workspace.Files(string.Empty));
+
+    /// <summary>The recorded error message; fails when the workspace recorded no error.</summary>
+    public static string RequireError(this BasketWorkspace workspace)
+    {
+        Assert.True(workspace.StatusIsError, $"Expected an error status, got: {workspace.StatusMessage}");
+        return workspace.StatusMessage ?? string.Empty;
+    }
 }
 
 internal static class FileAssert

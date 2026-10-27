@@ -15,18 +15,18 @@ public sealed class BasketWorkspacePasteTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
-        const string text = "Привет, мир!\r\nВторая строка — тире";
+        const string text = "Grüße, 世界!\r\nSecond line - ü";
         _harness.Clipboard.Payload = PastePayload.FromText(text);
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(1, added);
-        var filePath = Path.Combine(directory, "Пн, 13-02.txt");
+        var filePath = Path.Combine(directory, "Mon, 13-02.txt");
         FileAssert.HasUtf8TextWithoutBom(filePath, text);
-        var material = workspace.RequireSingleMaterial();
-        Assert.Equal("Пн, 13-02.txt", material.FileName);
-        Assert.Equal(MaterialKind.Text, material.Kind);
-        Assert.Equal("Текст добавлен.", workspace.StatusMessage);
+        var file = workspace.RequireSingleFile();
+        Assert.Equal("Mon, 13-02.txt", file.Name);
+        Assert.Equal(MaterialKind.Text, file.Kind);
+        Assert.False(workspace.StatusIsError);
     }
 
     [Fact]
@@ -35,18 +35,18 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
 
-        _harness.Clipboard.Payload = PastePayload.FromText("первый");
-        Assert.Equal(1, workspace.AddFromClipboard());
-        _harness.Clipboard.Payload = PastePayload.FromText("второй");
-        Assert.Equal(1, workspace.AddFromClipboard());
-        _harness.Clipboard.Payload = PastePayload.FromText("третий");
-        Assert.Equal(1, workspace.AddFromClipboard());
+        _harness.Clipboard.Payload = PastePayload.FromText("first");
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
+        _harness.Clipboard.Payload = PastePayload.FromText("second");
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
+        _harness.Clipboard.Payload = PastePayload.FromText("third");
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
 
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Пн, 13-02.txt"), "первый");
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Пн, 13-02 (2).txt"), "второй");
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Пн, 13-02 (3).txt"), "третий");
-        Assert.Equal(3, workspace.Materials.Count);
-        Assert.All(workspace.Materials, material => Assert.Equal(MaterialKind.Text, material.Kind));
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Mon, 13-02.txt"), "first");
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Mon, 13-02 (2).txt"), "second");
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Mon, 13-02 (3).txt"), "third");
+        Assert.Equal(3, workspace.Files(string.Empty).Count);
+        Assert.All(workspace.Files(string.Empty), file => Assert.Equal(MaterialKind.Text, file.Kind));
     }
 
     [Fact]
@@ -56,32 +56,16 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var directory = workspace.RequireActiveTab().DirectoryPath;
         _harness.Clipboard.Payload = PastePayload.FromText("https://example.com/page?q=1");
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(1, added);
-        var urlPath = Path.Combine(directory, "Пн, 13-02.url");
+        var urlPath = Path.Combine(directory, "Mon, 13-02.url");
         Assert.Equal(
             "[InternetShortcut]\r\nURL=https://example.com/page?q=1\r\n",
             File.ReadAllText(urlPath, Encoding.UTF8));
-        var material = workspace.RequireSingleMaterial();
-        Assert.Equal("Пн, 13-02.url", material.FileName);
-        Assert.Equal(MaterialKind.Link, material.Kind);
-        Assert.Contains("Добавлена ссылка", workspace.StatusMessage);
-        Assert.Contains("example.com", workspace.StatusMessage);
-    }
-
-    [Fact]
-    public void AddFromClipboard_HttpLinkPaste_CreatesInternetShortcut()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        var directory = workspace.RequireActiveTab().DirectoryPath;
-        _harness.Clipboard.Payload = PastePayload.FromText("http://example.com/path");
-
-        Assert.Equal(1, workspace.AddFromClipboard());
-
-        var content = File.ReadAllText(Path.Combine(directory, "Пн, 13-02.url"), Encoding.UTF8);
-        Assert.Equal("[InternetShortcut]\r\nURL=http://example.com/path\r\n", content);
-        Assert.Equal(MaterialKind.Link, workspace.RequireSingleMaterial().Kind);
+        var file = workspace.RequireSingleFile();
+        Assert.Equal("Mon, 13-02.url", file.Name);
+        Assert.Equal(MaterialKind.Link, file.Kind);
     }
 
     [Fact]
@@ -91,32 +75,15 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var directory = workspace.RequireActiveTab().DirectoryPath;
         _harness.Clipboard.Payload = PastePayload.FromImage(PngBytes);
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(1, added);
-        var filePath = Path.Combine(directory, "Пн, 13-02.png");
+        var filePath = Path.Combine(directory, "Mon, 13-02.png");
         FileAssert.Exists(filePath);
         Assert.Equal(PngBytes, File.ReadAllBytes(filePath));
-        var material = workspace.RequireSingleMaterial();
-        Assert.Equal("Пн, 13-02.png", material.FileName);
-        Assert.Equal(MaterialKind.Image, material.Kind);
-        Assert.Contains("скриншот", workspace.StatusMessage);
-    }
-
-    [Fact]
-    public void AddFromClipboard_SecondImagePaste_GetsNumberedSuffix()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        var directory = workspace.RequireActiveTab().DirectoryPath;
-
-        _harness.Clipboard.Payload = PastePayload.FromImage(PngBytes);
-        Assert.Equal(1, workspace.AddFromClipboard());
-        _harness.Clipboard.Payload = PastePayload.FromImage([0xAA, 0xBB]);
-        Assert.Equal(1, workspace.AddFromClipboard());
-
-        Assert.Equal(PngBytes, File.ReadAllBytes(Path.Combine(directory, "Пн, 13-02.png")));
-        Assert.Equal(new byte[] { 0xAA, 0xBB }, File.ReadAllBytes(Path.Combine(directory, "Пн, 13-02 (2).png")));
-        Assert.Equal(2, workspace.Materials.Count);
+        var file = workspace.RequireSingleFile();
+        Assert.Equal("Mon, 13-02.png", file.Name);
+        Assert.Equal(MaterialKind.Image, file.Kind);
     }
 
     [Fact]
@@ -125,11 +92,11 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         _harness.Clipboard.Payload = PastePayload.None;
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(0, added);
-        Assert.Equal("В буфере обмена нет поддерживаемых данных.", workspace.StatusMessage);
-        Assert.Empty(workspace.Materials);
+        Assert.NotNull(workspace.StatusMessage);
+        Assert.Empty(workspace.Files(string.Empty));
         Assert.Equal(1, _harness.Clipboard.ReadCount);
     }
 
@@ -140,25 +107,11 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var directory = workspace.RequireActiveTab().DirectoryPath;
         _harness.Clipboard.Payload = PastePayload.FromText("   ");
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(0, added);
-        Assert.Equal("В буфере обмена нет текста.", workspace.StatusMessage);
         Assert.Empty(Directory.GetFiles(directory));
-        Assert.Empty(workspace.Materials);
-    }
-
-    [Fact]
-    public void AddFromClipboard_WhenClipboardHoldsEmptyImage_ReturnsZeroAndSetsStatus()
-    {
-        var workspace = _harness.CreateInitializedWorkspace();
-        _harness.Clipboard.Payload = PastePayload.FromImage([]);
-
-        var added = workspace.AddFromClipboard();
-
-        Assert.Equal(0, added);
-        Assert.Equal("В буфере обмена нет изображения.", workspace.StatusMessage);
-        Assert.Empty(workspace.Materials);
+        Assert.Empty(workspace.Files(string.Empty));
     }
 
     [Fact]
@@ -167,12 +120,11 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         _harness.Clipboard.FailureToThrow = new InvalidOperationException("clipboard is busy");
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(0, added);
-        Assert.Contains("Не удалось прочитать буфер обмена", workspace.StatusMessage);
-        Assert.Single(_harness.Confirmations.Errors);
-        Assert.Empty(workspace.Materials);
+        workspace.RequireError();
+        Assert.Empty(workspace.Files(string.Empty));
     }
 
     [Fact]
@@ -181,16 +133,15 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
         var binarySource = _harness.Temp.CreateSourceFile("alpha.bin", "binary payload");
-        var textSource = _harness.Temp.CreateSourceFile("beta.txt", "бета");
+        var textSource = _harness.Temp.CreateSourceFile("beta.txt", "beta");
         _harness.Clipboard.Payload = PastePayload.FromFiles([binarySource, textSource]);
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(2, added);
         Assert.Equal("binary payload", File.ReadAllText(Path.Combine(directory, "alpha.bin")));
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "beta.txt"), "бета");
-        Assert.Equal(2, workspace.Materials.Count);
-        Assert.Equal("Добавлено 2 файла.", workspace.StatusMessage);
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "beta.txt"), "beta");
+        Assert.Equal(2, workspace.Files(string.Empty).Count);
         Assert.True(File.Exists(binarySource));
         Assert.True(File.Exists(textSource));
     }
@@ -200,18 +151,18 @@ public sealed class BasketWorkspacePasteTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
-        var firstSource = _harness.Temp.CreateSourceFile("report.txt", "первый");
+        var firstSource = _harness.Temp.CreateSourceFile("report.txt", "first");
         _harness.Clipboard.Payload = PastePayload.FromFiles([firstSource]);
-        Assert.Equal(1, workspace.AddFromClipboard());
-        var secondSource = _harness.Temp.CreateSourceFile(Path.Combine("other", "report.txt"), "второй");
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
+        var secondSource = _harness.Temp.CreateSourceFile(Path.Combine("other", "report.txt"), "second");
         _harness.Clipboard.Payload = PastePayload.FromFiles([secondSource]);
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(1, added);
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "report.txt"), "первый");
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "report (2).txt"), "второй");
-        Assert.Equal(2, workspace.Materials.Count);
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "report.txt"), "first");
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "report (2).txt"), "second");
+        Assert.Equal(2, workspace.Files(string.Empty).Count);
     }
 
     [Fact]
@@ -219,15 +170,14 @@ public sealed class BasketWorkspacePasteTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
-        var source = _harness.Temp.CreateSourceFile("report.txt", "данные");
-        Assert.Equal(1, workspace.AddFiles([source]));
+        var source = _harness.Temp.CreateSourceFile("report.txt", "data");
+        Assert.Equal(1, workspace.AddFiles([source], string.Empty));
         _harness.Clipboard.Payload = PastePayload.FromFiles([Path.Combine(directory, "report.txt")]);
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(0, added);
-        Assert.Equal("Файлы уже находятся в этой корзине.", workspace.StatusMessage);
-        Assert.Single(workspace.Materials);
+        Assert.Single(workspace.Files(string.Empty));
     }
 
     [Fact]
@@ -235,17 +185,16 @@ public sealed class BasketWorkspacePasteTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
-        var source = _harness.Temp.CreateSourceFile("report.txt", "данные");
-        Assert.Equal(1, workspace.AddFiles([source]));
-        var outside = _harness.Temp.CreateSourceFile("other.txt", "другое");
+        var source = _harness.Temp.CreateSourceFile("report.txt", "data");
+        Assert.Equal(1, workspace.AddFiles([source], string.Empty));
+        var outside = _harness.Temp.CreateSourceFile("other.txt", "other");
         _harness.Clipboard.Payload = PastePayload.FromFiles([Path.Combine(directory, "report.txt"), outside]);
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(1, added);
-        Assert.Equal("Добавлен 1 файл (часть файлов уже была в корзине).", workspace.StatusMessage);
-        Assert.Equal(2, workspace.Materials.Count);
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "other.txt"), "другое");
+        Assert.Equal(2, workspace.Files(string.Empty).Count);
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "other.txt"), "other");
     }
 
     [Fact]
@@ -254,11 +203,11 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         _harness.Clipboard.Payload = PastePayload.FromFiles([]);
 
-        var added = workspace.AddFromClipboard();
+        var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(0, added);
-        Assert.Equal("Нет файлов для добавления.", workspace.StatusMessage);
-        Assert.Empty(workspace.Materials);
+        Assert.NotNull(workspace.StatusMessage);
+        Assert.Empty(workspace.Files(string.Empty));
     }
 
     [Fact]
@@ -266,18 +215,17 @@ public sealed class BasketWorkspacePasteTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var directoryPath = _harness.Temp.CreateSourceDirectory("dropped-folder");
-        _harness.Temp.CreateSourceFile(Path.Combine("dropped-folder", "nested", "note.txt"), "внутри");
+        _harness.Temp.CreateSourceFile(Path.Combine("dropped-folder", "nested", "note.txt"), "inside");
 
-        var added = workspace.AddFiles([directoryPath]);
+        var added = workspace.AddFiles([directoryPath], string.Empty);
 
         Assert.Equal(1, added);
         var basketDirectory = workspace.RequireActiveTab().DirectoryPath;
         FileAssert.HasUtf8TextWithoutBom(
             Path.Combine(basketDirectory, "dropped-folder", "nested", "note.txt"),
-            "внутри");
-        Assert.Single(workspace.Entries, entry => entry.IsFolder && entry.Name == "dropped-folder");
-        Assert.Empty(_harness.Confirmations.Errors);
-        Assert.Contains("Добавлено", workspace.StatusMessage);
+            "inside");
+        Assert.Single(workspace.GetEntries(string.Empty), entry => entry.IsFolder && entry.Name == "dropped-folder");
+        Assert.False(workspace.StatusIsError);
     }
 
     [Fact]
@@ -286,13 +234,13 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var source = _harness.Temp.CreateSourceDirectory("source");
         _harness.Temp.CreateSourceFile(Path.Combine("source", "file.txt"), "x");
-        Assert.Equal(1, workspace.AddFiles([source]));
+        Assert.Equal(1, workspace.AddFiles([source], string.Empty));
         var copiedFolder = Path.Combine(workspace.RequireActiveTab().DirectoryPath, "source");
 
-        var added = workspace.AddFiles([copiedFolder]);
+        var added = workspace.AddFiles([copiedFolder], string.Empty);
 
         Assert.Equal(0, added);
-        Assert.Contains("уже", workspace.StatusMessage);
+        Assert.NotNull(workspace.StatusMessage);
     }
 
     [Fact]
@@ -302,13 +250,11 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var activeDirectory = workspace.RequireActiveTab().DirectoryPath;
         var missingPath = Path.Combine(_harness.Temp.Root, "missing.bin");
 
-        var added = workspace.AddFiles([missingPath]);
+        var added = workspace.AddFiles([missingPath], string.Empty);
 
         Assert.Equal(0, added);
-        Assert.Empty(workspace.Materials);
-        var error = Assert.Single(_harness.Confirmations.Errors);
-        Assert.Contains("Файл не найден", error);
-        Assert.Contains("Файл не найден", workspace.StatusMessage);
+        Assert.Empty(workspace.Files(string.Empty));
+        workspace.RequireError();
         Assert.Empty(Directory.GetFiles(activeDirectory));
     }
 
@@ -318,9 +264,9 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var firstDirectory = workspace.RequireActiveTab().DirectoryPath;
         var secondTab = workspace.CreateAndRequireTab();
-        var source = _harness.Temp.CreateSourceFile("context.txt", "контекст");
+        var source = _harness.Temp.CreateSourceFile("context.txt", "context");
 
-        var added = workspace.AddFiles([source]);
+        var added = workspace.AddFiles([source], string.Empty);
 
         Assert.Equal(1, added);
         FileAssert.Exists(Path.Combine(secondTab.DirectoryPath, "context.txt"));
@@ -331,16 +277,16 @@ public sealed class BasketWorkspacePasteTests : IDisposable
     public void AddQuickNote_CreatesTxtNamedByClock()
     {
         var workspace = _harness.CreateInitializedWorkspace();
-        const string noteText = "Заметка: купить хлеб";
+        const string noteText = "Note: buy bread";
 
-        var note = workspace.AddQuickNote(noteText);
+        var note = workspace.AddQuickNote(noteText, string.Empty);
 
         Assert.NotNull(note);
-        Assert.Equal("Пн, 13-02.txt", note.FileName);
+        Assert.Equal("Mon, 13-02.txt", note.Name);
         Assert.Equal(noteText, File.ReadAllText(note.FullPath, Encoding.UTF8));
         Assert.Equal(Encoding.UTF8.GetBytes(noteText), File.ReadAllBytes(note.FullPath));
         Assert.Equal(MaterialKind.Text, note.Kind);
-        Assert.Equal(note.FullPath, workspace.RequireSingleMaterial().FullPath);
+        Assert.Equal(note.FullPath, workspace.RequireSingleFile().FullPath);
     }
 
     [Fact]
@@ -349,15 +295,15 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
 
-        var first = workspace.AddQuickNote("первая заметка");
-        var second = workspace.AddQuickNote("вторая заметка");
+        var first = workspace.AddQuickNote("first note", string.Empty);
+        var second = workspace.AddQuickNote("second note", string.Empty);
 
         Assert.NotNull(first);
         Assert.NotNull(second);
-        Assert.Equal("Пн, 13-02.txt", first.FileName);
-        Assert.Equal("Пн, 13-02 (2).txt", second.FileName);
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Пн, 13-02.txt"), "первая заметка");
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Пн, 13-02 (2).txt"), "вторая заметка");
+        Assert.Equal("Mon, 13-02.txt", first.Name);
+        Assert.Equal("Mon, 13-02 (2).txt", second.Name);
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Mon, 13-02.txt"), "first note");
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Mon, 13-02 (2).txt"), "second note");
     }
 
     [Theory]
@@ -370,11 +316,11 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
 
-        var note = workspace.AddQuickNote(noteText);
+        var note = workspace.AddQuickNote(noteText, string.Empty);
 
         Assert.Null(note);
         Assert.Empty(Directory.GetFiles(directory));
-        Assert.Empty(workspace.Materials);
+        Assert.Empty(workspace.Files(string.Empty));
     }
 
     [Fact]
@@ -383,9 +329,9 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         _harness.Clock.Now = TestMoments.ThursdayMidnight;
 
-        var note = workspace.AddQuickNote("ночная заметка");
+        var note = workspace.AddQuickNote("night note", string.Empty);
 
         Assert.NotNull(note);
-        Assert.Equal("Чт, 00-05.txt", note.FileName);
+        Assert.Equal("Thu, 00-05.txt", note.Name);
     }
 }

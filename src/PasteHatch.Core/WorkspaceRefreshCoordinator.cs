@@ -1,8 +1,10 @@
 namespace PasteHatch.Core;
 
 /// <summary>
-/// Owns watch lifetime, stale notification rejection and UI refresh coalescing.
-/// Public operations and dispatched work run on the UI thread; watcher events only enqueue work.
+/// Owns watch lifetime, stale notification rejection and UI refresh coalescing. Public operations
+/// and dispatched work run on the UI thread; watcher events only enqueue work. The two watchers
+/// share one contract with different watch configuration: one recursive on the active basket and
+/// one on the baskets root that adopts folders copied there.
 /// </summary>
 public sealed class WorkspaceRefreshCoordinator : IDisposable
 {
@@ -10,7 +12,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     private readonly IWorkspaceWatcher _watcher;
     private readonly IWorkspaceWatcher _rootWatcher;
     private readonly Func<Action, bool> _enqueue;
-    private readonly Action<bool> _render;
+    private readonly Action<ViewRefresh> _render;
     private readonly ITextProvider _text;
     private EventHandler? _changed;
     private EventHandler? _error;
@@ -24,11 +26,11 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     private bool _watchFailed;
     private bool _startingWatch;
 
-    public WorkspaceRefreshCoordinator(BasketWorkspace workspace, IWorkspaceWatcher watcher, IWorkspaceWatcher rootWatcher,
-        Func<Action, bool> enqueue, Action<bool> render, ITextProvider? text = null)
+    public WorkspaceRefreshCoordinator(BasketWorkspace workspace, IWorkspaceWatcher basketWatcher, IWorkspaceWatcher rootWatcher,
+        Func<Action, bool> enqueue, Action<ViewRefresh> render, ITextProvider? text = null)
     {
         _workspace = workspace;
-        _watcher = watcher;
+        _watcher = basketWatcher;
         _rootWatcher = rootWatcher;
         _enqueue = enqueue;
         _render = render;
@@ -49,7 +51,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         if (_disposed) return;
         UpdateWatch();
         if (change.Kind == WorkspaceChangeKind.Contents && _visible)
-            _watcher.SuspendFor(TimeSpan.FromSeconds(1));
+            _watcher.SuppressEcho();
         _treeDirty |= change.Kind != WorkspaceChangeKind.Status;
         Schedule();
     }
@@ -119,7 +121,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         var treeDirty = _treeDirty;
         _treeDirty = false;
         _scheduled = false;
-        _render(treeDirty);
+        _render(new ViewRefresh(RebuildTree: treeDirty));
     }
 
     private void StopWatch()

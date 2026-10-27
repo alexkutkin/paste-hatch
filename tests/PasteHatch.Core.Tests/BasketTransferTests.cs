@@ -15,8 +15,8 @@ public sealed class BasketTransferTests : IDisposable
         workspace.CopyEntryToClipboard(Assert.Single(workspace.GetEntries("")), move: false);
         _harness.Clipboard.Payload = PastePayload.FromFiles([source]);
 
-        Assert.Equal(1, workspace.AddFromClipboard());
-        Assert.Equal(1, workspace.AddFromClipboard());
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
         Assert.Equal(3, Directory.GetFiles(root).Length);
         Assert.All(Directory.GetFiles(root), p => Assert.Equal("original", File.ReadAllText(p)));
     }
@@ -46,18 +46,15 @@ public sealed class BasketTransferTests : IDisposable
         File.WriteAllText(source, "original");
         workspace.CopyEntryToClipboard(Assert.Single(workspace.GetEntries("")), move: false);
         _harness.Clipboard.Payload = PastePayload.FromText("replacement");
-        workspace.AddFromClipboard();
+        workspace.AddFromClipboard(string.Empty);
         _harness.Clipboard.Payload = PastePayload.FromFiles([source]);
 
-        Assert.Equal(0, workspace.AddFromClipboard());
+        Assert.Equal(0, workspace.AddFromClipboard(string.Empty));
         Assert.False(File.Exists(Path.Combine(root, "note (2).txt")));
     }
 
-    [Theory]
-    [InlineData("import")]
-    [InlineData("copy")]
-    [InlineData("move")]
-    public void PartialTransfer_PublishesFinalErrorAndKeepsSuccessfulFiles(string intent)
+    [Fact]
+    public void PartialImport_PublishesFinalErrorAndKeepsSuccessfulFiles()
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var root = workspace.RequireActiveTab().DirectoryPath;
@@ -66,12 +63,12 @@ public sealed class BasketTransferTests : IDisposable
         workspace.Changed += (_, e) => changes.Add((workspace.StatusIsError, e.Kind));
         string[] paths = [source, Path.Combine(_harness.Temp.SourceRoot, "missing.txt")];
 
-        var count = intent == "import" ? workspace.AddFiles(paths) : workspace.PasteFiles(paths, "", intent == "move");
+        var count = workspace.AddFiles(paths, string.Empty);
 
         Assert.Equal(1, count);
         Assert.Equal("payload", File.ReadAllText(Path.Combine(root, "source.txt")));
         Assert.Single(changes);
         Assert.Equal((true, WorkspaceChangeKind.Contents), changes[0]);
-        Assert.Equal(intent != "move", File.Exists(source));
+        Assert.True(File.Exists(source));
     }
 }

@@ -17,8 +17,6 @@ internal sealed class ReswTextProvider : ITextProvider
         Culture = culture;
     }
 
-    public static ReswTextProvider Russian { get; } = Load("ru-RU");
-
     public static ReswTextProvider English { get; } = Load("en-US");
 
     public CultureInfo Culture { get; }
