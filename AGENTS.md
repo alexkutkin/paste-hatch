@@ -2,7 +2,10 @@
 
 ## Communication
 - Communicate with the owner in Russian.
-- Write commit messages and test names in English.
+- Keep everything the repository stores in English: code and comments, commit
+  messages, test names, README, docs, ADRs, AGENTS.md, config comments.
+- Content, not documentation, keeps its own language: product strings in locale
+  resource files (`Strings/ru-RU` and alike) and personal financial documents.
 
 ## Git
 - Work directly on `main`. Create branches or pull requests only when requested.
