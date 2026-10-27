@@ -68,8 +68,11 @@ Responsibility boundaries:
   path checks, collision handling and partial-success handling. `BasketWorkspace` publishes
   the final result and holds the copy/cut intent; the window passes user actions through.
 - **Tree state** is held by `BasketTreeNavigation`: selection and expanded folders belong to
-  the basket UID, a vanished selected path falls back to the nearest existing parent. WinUI
-  builds nodes lazily and renders the breadcrumb prepared by the navigation.
+  the basket UID, and the current folder is derived from the selection (a selected folder is
+  current, a selected file's parent is current), so no other module keeps a copy of it.
+  Operations receive the folder explicitly and the state file records it. A vanished selected
+  path falls back to the nearest existing parent. WinUI builds nodes lazily, renders the
+  breadcrumb prepared by the navigation and reconciles the tree with one call.
 - **Live refresh** is coordinated by `WorkspaceRefreshCoordinator`: watcher lifetime depends
   on window visibility and the active basket. A second, nonrecursive watcher observes the
   baskets root; visible folders copied there are adopted as baskets with their original names,
@@ -81,7 +84,9 @@ Responsibility boundaries:
 - **PasteHatch.Core** knows nothing about WinUI: the domain rules (the 10-basket limit,
   "the last basket never closes", tree sorting and traversal, name collisions, type
   classification, UID, restore) and the contracts `IClipboardReader` / `IShellService` /
-  `IConfirmationService` / `ITabStateStore`. Covered by xUnit tests.
+  `IConfirmationService` / `ITabStateStore`. Every basket item is one `BasketEntry` record with
+  a kind discriminator, and `RenameEntry` / `DeleteEntry` / `OpenEntry` carry the kind rules
+  inside. Covered by xUnit tests.
 - **PasteHatch.App/Platform** implements those contracts with native Windows means
   (WinForms `TaskDialog`/`NotifyIcon`/`Clipboard`, `Microsoft.VisualBasic.FileIO` for the
   Recycle Bin, Win32 `SetWindowPos`/monitor/pin, `Mutex`+event for the single instance).
