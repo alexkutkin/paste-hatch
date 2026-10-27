@@ -7,6 +7,9 @@
 
 Files and clipboard notes for local AI agents.
 
+**[Download](https://github.com/alexkutkin/paste-hatch/releases/latest)** the ready-made
+app, extract the ZIP and run `PasteHatch.exe`.
+
 Windows 10/11 · .NET 10 · WinUI 3
 
 </div>
@@ -151,3 +154,7 @@ Results stay in the ignored `.scratch/verify-pastehatch/` folder. See the
 The domain code is in `src/PasteHatch.Core`; the WinUI app and Windows integration are in
 `src/PasteHatch.App`. See the [architecture overview](docs/architecture-overview.md) and
 [accepted decisions](docs/decisions.md) for more detail.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
