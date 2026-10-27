@@ -1,7 +1,7 @@
 # PasteHatch — architecture overview
 
-The diagrams follow the [brief](discovery/brief.txt) and the prototype and match the
-implemented application. Stack and decision rationale: [decisions.md](decisions.md).
+The diagrams match the implemented application. Stack and decision rationale:
+[decisions.md](decisions.md).
 
 - **Platform:** C#/.NET 9, WinUI 3 + Windows App SDK 2.5.1 (self-contained, no Windows App
   SDK runtime install), Windows 10 1809+ / Windows 11.

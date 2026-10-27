@@ -2,7 +2,7 @@ namespace PasteHatch.Core;
 
 /// <summary>
 /// All application paths. The user's local application data folder is resolved through
-/// <see cref="Environment.SpecialFolder.LocalApplicationData"/> as required by the brief,
+/// <see cref="Environment.SpecialFolder.LocalApplicationData"/>,
 /// so baskets always live under <c>%LOCALAPPDATA%\PasteHatch\Baskets</c>.
 /// </summary>
 public static class PasteHatchPaths

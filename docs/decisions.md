@@ -1,11 +1,10 @@
 # Accepted decisions
 
-Requirements: [`docs/discovery/brief.txt`](discovery/brief.txt). Where a decision below
-contradicts Microsoft guidance, the brief wins.
+Where a decision below contradicts Microsoft guidance, the product requirements won.
 
 - **WinUI 3 + Windows App SDK on .NET 9.** Standard Fluent controls and the system theme
-  only; the prototype is a screen inventory source, never a style to copy. The planned move
-  to .NET 10 LTS is a target framework rename and nothing more.
+  only; never invent a custom look. The planned move to .NET 10 LTS is a target framework
+  rename and nothing more.
 - **Files on disk are the source of truth.** `state.json` is disposable: losing or
   corrupting it loses no materials. Basket display names live in state, not in folder
   names, so renaming a basket never breaks a path handed to an agent. Basket naming is
@@ -13,7 +12,8 @@ contradicts Microsoft guidance, the brief wins.
 - **The basket rail is a left list, not tabs.** Up to 10 baskets; the last basket never
   closes; closing goes to the Recycle Bin with confirmation.
 - **Confirmations use the native TaskDialog with «Отмена» as the default button.**
-  Microsoft guidance calls a Recycle Bin confirmation unnecessary; the brief demands it.
+  Microsoft guidance calls a Recycle Bin confirmation unnecessary; the product
+  requirements demand it.
 - **The app lives in the notification area.** Only the very first launch shows the window.
   A second launch shows the running window and exits: one instance, one tray icon, one
   writer of `state.json`.

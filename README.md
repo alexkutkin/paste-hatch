@@ -197,7 +197,7 @@ src/PasteHatch.App      — WinUI 3: window, basket rail, file tree, preview, se
 src/PasteHatch.App/Platform — clipboard, tray, Recycle Bin, TaskDialog, single instance, FileSystemWatcher, Win32
 tests/PasteHatch.Core.Tests — xUnit domain tests
 scripts                 — build/run/icon generation/shortcut/headless smoke runs
-docs                    — brief, architecture, accepted decisions, prototype
+docs                    — architecture and accepted decisions
 ```
 
 - **PasteHatch.Core** knows nothing about WinUI: the rules (the 10-basket limit, "the last
@@ -312,9 +312,6 @@ asks for confirmation.
 
 ## Links
 
-- [Project brief](docs/discovery/brief.txt) — the original requirements.
 - [Architecture](docs/architecture-overview.md) — boundaries and C4 diagrams.
 - [Accepted decisions](docs/decisions.md) — why WinUI 3, tray and confirmations were
   chosen and how the decisions were verified.
-- [Visual prototype](docs/discovery/prototype/README.md) — the original mock (as a screen
-  inventory source only; the app uses standard controls).

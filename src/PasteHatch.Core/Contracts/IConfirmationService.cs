@@ -1,7 +1,7 @@
 namespace PasteHatch.Core;
 
 /// <summary>
-/// Native confirmation and error dialogs. The brief requires a confirmation before a basket
+/// Native confirmation and error dialogs. A confirmation is required before a basket
 /// or material is sent to the Windows Recycle Bin; Microsoft UX guidance asks for a modal
 /// task dialog with the safest response as the default, which is what implementations use.
 /// </summary>
