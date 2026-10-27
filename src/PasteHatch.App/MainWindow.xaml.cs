@@ -99,7 +99,7 @@ public sealed partial class MainWindow : Window
             formatter: new TabNameFormatter(() => Localization.Culture),
             text: Localization.Text);
         _treeNavigation = new BasketTreeNavigation(_workspace);
-        _liveRefresh = new WorkspaceRefreshCoordinator(_workspace, new FolderWatcher(),
+        _liveRefresh = new WorkspaceRefreshCoordinator(_workspace, new FolderWatcher(), new FolderWatcher(),
             action => DispatcherQueue.TryEnqueue(() => action()), RefreshAll, Localization.Text);
 
         ConfigureWindowShell();

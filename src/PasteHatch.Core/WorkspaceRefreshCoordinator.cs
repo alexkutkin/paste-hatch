@@ -8,6 +8,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
 {
     private readonly BasketWorkspace _workspace;
     private readonly IWorkspaceWatcher _watcher;
+    private readonly IWorkspaceWatcher _rootWatcher;
     private readonly Func<Action, bool> _enqueue;
     private readonly Action<bool> _render;
     private readonly ITextProvider _text;
@@ -23,11 +24,12 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     private bool _watchFailed;
     private bool _startingWatch;
 
-    public WorkspaceRefreshCoordinator(BasketWorkspace workspace, IWorkspaceWatcher watcher,
+    public WorkspaceRefreshCoordinator(BasketWorkspace workspace, IWorkspaceWatcher watcher, IWorkspaceWatcher rootWatcher,
         Func<Action, bool> enqueue, Action<bool> render, ITextProvider? text = null)
     {
         _workspace = workspace;
         _watcher = watcher;
+        _rootWatcher = rootWatcher;
         _enqueue = enqueue;
         _render = render;
         _text = text ?? KeyTextProvider.Instance;
@@ -64,10 +66,13 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         _error = (_, _) => QueueDiskChange(generation, true);
         _watcher.Changed += _changed;
         _watcher.Error += _error;
+        _rootWatcher.Changed += _changed;
+        _rootWatcher.Error += _error;
         try
         {
             _startingWatch = true;
             _watcher.Watch(tab.DirectoryPath);
+            _rootWatcher.Watch(_workspace.BasketsRoot, includeSubdirectories: false);
             _watchedUid = tab.Uid;
         }
         catch (Exception ex)
@@ -122,8 +127,11 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         _generation++;
         if (_changed is not null) _watcher.Changed -= _changed;
         if (_error is not null) _watcher.Error -= _error;
+        if (_changed is not null) _rootWatcher.Changed -= _changed;
+        if (_error is not null) _rootWatcher.Error -= _error;
         _changed = _error = null;
         _watcher.Stop();
+        _rootWatcher.Stop();
         _watchedUid = null;
         _diskDirty = _watchFailed = false;
     }
@@ -135,5 +143,6 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         _workspace.Changed -= OnWorkspaceChanged;
         StopWatch();
         _watcher.Dispose();
+        _rootWatcher.Dispose();
     }
 }

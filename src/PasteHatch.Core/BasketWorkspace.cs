@@ -69,6 +69,8 @@ public sealed class BasketWorkspace
 
     public IReadOnlyList<BasketTab> Tabs => _tabs;
 
+    public string BasketsRoot => _basketsRoot;
+
     public BasketTab? ActiveTab => _tabs.Find(tab => tab.Uid == _activeUid) ?? _tabs.FirstOrDefault();
 
     /// <summary>Items of the folder currently open, folders first and then files.</summary>
@@ -1051,6 +1053,7 @@ public sealed class BasketWorkspace
     /// <summary>Re-reads the active folder, e.g. after an external agent changed it.</summary>
     public void Refresh()
     {
+        if (AdoptFolders()) SaveStateQuietly();
         RefreshEntries();
         RaiseChanged(WorkspaceChangeKind.View);
     }
@@ -1110,12 +1113,17 @@ public sealed class BasketWorkspace
             _selectedFolders[saved.Uid] = NormalizeRelativePath(saved.SelectedFolder) ?? string.Empty;
         }
 
+        AdoptFolders();
+    }
+
+    private bool AdoptFolders()
+    {
+        var adopted = false;
         // Folders that exist on disk but not in the state file (lost state, crash after create)
         // are still user baskets, so they are adopted instead of being left unreachable.
-        var orphanDirectories = Directory.EnumerateDirectories(_basketsRoot)
-            .Select(path => new DirectoryInfo(path))
-            .Where(info => UidPattern.IsMatch(info.Name))
-            .Where(info => _tabs.All(tab => !string.Equals(tab.Uid, info.Name, StringComparison.Ordinal)))
+        var orphanDirectories = new DirectoryInfo(_basketsRoot)
+            .EnumerateDirectories("*", ChildEntriesOptions)
+            .Where(info => _tabs.All(tab => !string.Equals(tab.Uid, info.Name, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(info => info.CreationTimeUtc)
             .ThenBy(info => info.Name, StringComparer.Ordinal);
 
@@ -1128,10 +1136,12 @@ public sealed class BasketWorkspace
 
             _tabs.Add(new BasketTab(
                 directory.Name,
-                DefaultNameFor(directory.FullName),
+                UidPattern.IsMatch(directory.Name) ? DefaultNameFor(directory.FullName) : directory.Name,
                 directory.FullName));
             _selectedFolders[directory.Name] = string.Empty;
+            adopted = true;
         }
+        return adopted;
     }
 
     private BasketTab CreateBasketInternal()

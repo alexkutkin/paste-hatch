@@ -6,9 +6,10 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
     private readonly Queue<Action> _queue = new();
     private readonly List<bool> _renders = [];
     private readonly FakeWatcher _watcher = new();
+    private readonly FakeWatcher _rootWatcher = new();
     public void Dispose() => _harness.Dispose();
 
-    private WorkspaceRefreshCoordinator Create(BasketWorkspace workspace) => new(workspace, _watcher,
+    private WorkspaceRefreshCoordinator Create(BasketWorkspace workspace) => new(workspace, _watcher, _rootWatcher,
         action => { _queue.Enqueue(action); return true; }, tree => _renders.Add(tree), _harness.Text);
 
     private void Drain()
@@ -19,6 +20,27 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
             Assert.True(--limit > 0, "Refresh scheduling did not settle.");
             action();
         }
+    }
+
+    [Fact]
+    public void RootNotification_AdoptsExternalBasketAndStopsWhenHidden()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        using var coordinator = Create(workspace);
+        coordinator.SetVisible(true);
+        Drain();
+        Assert.Equal(_harness.Temp.BasketsRoot, _rootWatcher.Path);
+        Assert.False(_rootWatcher.IncludeSubdirectories);
+        _harness.Temp.CreateBasketDirectory("repo-grooming-skill");
+        _rootWatcher.Notify();
+        Drain();
+        Assert.Contains(workspace.Tabs, tab => tab.Uid == "repo-grooming-skill");
+        coordinator.SetVisible(false);
+        Assert.Null(_rootWatcher.Path);
+        _harness.Temp.CreateBasketDirectory("while-hidden");
+        coordinator.SetVisible(true);
+        Drain();
+        Assert.Contains(workspace.Tabs, tab => tab.Uid == "while-hidden");
     }
 
     [Fact]
@@ -125,7 +147,7 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var reject = true;
-        using var coordinator = new WorkspaceRefreshCoordinator(workspace, _watcher,
+        using var coordinator = new WorkspaceRefreshCoordinator(workspace, _watcher, _rootWatcher,
             action => { if (reject) return false; _queue.Enqueue(action); return true; }, tree => _renders.Add(tree),
             _harness.Text);
         workspace.Refresh();
@@ -143,11 +165,13 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         public int Starts { get; private set; }
         public int Suspensions { get; private set; }
         public bool ThrowOnStart { get; set; }
+        public bool IncludeSubdirectories { get; private set; }
         public void Watch(string directory, bool includeSubdirectories = true)
         {
             Starts++;
             if (ThrowOnStart) throw new IOException("watch failed");
             Path = directory;
+            IncludeSubdirectories = includeSubdirectories;
         }
         public void Stop() => Path = null;
         public void SuspendFor(TimeSpan duration) => Suspensions++;

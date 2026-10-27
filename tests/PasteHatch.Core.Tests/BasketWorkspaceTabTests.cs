@@ -9,6 +9,60 @@ public sealed class BasketWorkspaceTabTests : IDisposable
     public void Dispose() => _harness.Dispose();
 
     [Fact]
+    public void Refresh_AdoptsExternalNamedFolderWithoutChangingActiveBasket()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var active = workspace.RequireActiveTab();
+        var directory = _harness.Temp.CreateBasketDirectory("repo-grooming-skill");
+        File.WriteAllText(Path.Combine(directory, "SKILL.md"), "skill");
+
+        workspace.Refresh();
+
+        var adopted = Assert.Single(workspace.Tabs, tab => tab.Uid == "repo-grooming-skill");
+        Assert.Equal("repo-grooming-skill", adopted.DisplayName);
+        Assert.Equal(directory, adopted.DirectoryPath);
+        Assert.Equal(active, workspace.ActiveTab);
+        Assert.Contains(_harness.ReadSavedState().Tabs, tab => tab.Uid == adopted.Uid);
+        workspace.Refresh();
+        Assert.Equal(2, workspace.Tabs.Count);
+        var restored = _harness.CreateInitializedWorkspace();
+        Assert.Contains(restored.Tabs, tab => tab.Uid == adopted.Uid && tab.DisplayName == adopted.DisplayName);
+    }
+
+    [Fact]
+    public void Refresh_AdoptionPreservesSelectionNamesAndOrderAndHonorsLimit()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var active = workspace.RequireActiveTab();
+        workspace.RenameTab(active.Uid, "Custom basket");
+        Directory.CreateDirectory(Path.Combine(active.DirectoryPath, "selected"));
+        workspace.RememberFolder("selected");
+        for (var i = 0; i < BasketWorkspace.MaxTabs + 1; i++)
+            _harness.Temp.CreateBasketDirectory($"external-{i}");
+
+        workspace.Refresh();
+
+        Assert.Equal(BasketWorkspace.MaxTabs, workspace.Tabs.Count);
+        Assert.Equal(active.Uid, workspace.Tabs[0].Uid);
+        Assert.Equal("Custom basket", workspace.Tabs[0].DisplayName);
+        Assert.Equal(active.Uid, workspace.RequireActiveTab().Uid);
+        Assert.Equal("selected", workspace.SelectedFolder);
+        Assert.Equal(BasketWorkspace.MaxTabs, _harness.ReadSavedState().Tabs.Count);
+    }
+
+    [Fact]
+    public void Refresh_DoesNotAdoptHiddenOrSystemFolders()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var hidden = _harness.Temp.CreateBasketDirectory("hidden-folder");
+        var system = _harness.Temp.CreateBasketDirectory("system-folder");
+        File.SetAttributes(hidden, File.GetAttributes(hidden) | FileAttributes.Hidden);
+        File.SetAttributes(system, File.GetAttributes(system) | FileAttributes.System);
+        workspace.Refresh();
+        Assert.Single(workspace.Tabs);
+    }
+
+    [Fact]
     public void Initialize_OnEmptyRoot_CreatesSingleBasket()
     {
         var workspace = _harness.CreateWorkspace();
@@ -383,10 +437,9 @@ public sealed class BasketWorkspaceTabTests : IDisposable
     }
 
     [Fact]
-    public void Initialize_IgnoresFoldersWhoseNamesAreNotValidUids()
+    public void Initialize_AdoptsNamedFoldersWithoutRenamingThem()
     {
-        // Dashes, lowercase, wrong length, digits outside 2-9 and the letters I/O (which the UID
-        // generator never produces) must all be ignored as basket folders.
+        // External folders retain their names even when they are not generated basket UIDs.
         var invalidNames = new[] { "invalid", "abcdef", "ABCDE", "ABCDE0", "TOOLONG", "IIIIII", "OOOOOO", "000000" };
         foreach (var invalidName in invalidNames)
         {
@@ -396,11 +449,9 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var workspace = _harness.CreateWorkspace();
         workspace.Initialize();
 
-        var created = workspace.RequireActiveTab();
-        Assert.Single(workspace.Tabs);
-        Assert.DoesNotContain(created.Uid, invalidNames);
-        Assert.Matches("^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$", created.Uid);
-        Assert.Equal(invalidNames.Length + 1, Directory.GetDirectories(_harness.Temp.BasketsRoot).Length);
+        Assert.Equal(invalidNames.Length, workspace.Tabs.Count);
+        Assert.All(workspace.Tabs, tab => Assert.Equal(tab.Uid, tab.DisplayName));
+        Assert.Equal(invalidNames.Length, Directory.GetDirectories(_harness.Temp.BasketsRoot).Length);
         foreach (var invalidName in invalidNames)
         {
             Assert.True(Directory.Exists(Path.Combine(_harness.Temp.BasketsRoot, invalidName)));

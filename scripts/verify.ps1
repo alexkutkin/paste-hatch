@@ -236,6 +236,28 @@ try {
         @(Get-ChildItem (Join-Path $data 'Baskets') -Directory).Count -eq 2
     }
     Snapshot 'baskets'
+    "ACTION copy an external named folder directly into Baskets" | Add-Content (Join-Path $run 'actions.txt')
+    $externalSource = Join-Path $run 'repo-grooming-skill'
+    New-Item -ItemType Directory -Path $externalSource | Out-Null
+    [IO.File]::WriteAllText((Join-Path $externalSource 'SKILL.md'),'external folder content')
+    Copy-Item -LiteralPath $externalSource -Destination (Join-Path $data 'Baskets') -Recurse
+    Wait-For 'root watcher discovers named external basket without refresh' {
+        $state = Get-Content (Join-Path $data 'state.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        @($state.tabs | Where-Object { $_.uid -eq 'repo-grooming-skill' -and $_.name -eq 'repo-grooming-skill' }).Count -eq 1
+    }
+    $externalRow = $null
+    Wait-For 'external basket appears in basket rail' {
+        $script:externalRow = (Find-Control 'BasketsList').FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.AndCondition]::new(
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'repo-grooming-skill'),
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ListItem)))
+        $null -ne $script:externalRow
+    }
+    $externalRow.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Wait-For 'copied basket contents appear in tree' { $null -ne (Find-Node 'SKILL.md') }
+    Select-Node 'SKILL.md'
+    Wait-For 'copied basket file preview preserves content' { (Find-Control 'PreviewText').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'external folder content' }
+    Snapshot 'external-basket'
     "ACTION second launch" | Add-Content (Join-Path $run 'actions.txt')
     $second = Start-Process $exe -PassThru -WindowStyle Hidden
     Wait-For 'second instance exits while primary survives' { $second.Refresh(); $app.Refresh(); $second.HasExited -and !$app.HasExited }
