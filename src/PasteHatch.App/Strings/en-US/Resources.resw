@@ -50,7 +50,7 @@
   <data name="Error_FolderNameTotalTooLong" xml:space="preserve"><value>The folder name is too long.</value></data>
 
   <!-- Core: baskets, folders and materials -->
-  <data name="Status_BasketLimit" xml:space="preserve"><value>The limit of 10 baskets has been reached.</value></data>
+  <data name="Status_BasketLimit" xml:space="preserve"><value>The limit of 100 baskets has been reached.</value></data>
   <data name="Error_CreateBasket" xml:space="preserve"><value>Could not create a basket: {0}</value></data>
   <data name="Status_LastBasket" xml:space="preserve"><value>The last basket cannot be closed.</value></data>
   <data name="Error_RecycleBasket" xml:space="preserve"><value>Could not move the basket to the Windows Recycle Bin: {0}</value></data>
@@ -151,6 +151,9 @@
   <data name="Action_Open" xml:space="preserve"><value>Open</value></data>
   <data name="ToolTip_OpenEntry" xml:space="preserve"><value>Open the file or folder</value></data>
   <data name="ToolTip_CopyEntryPath" xml:space="preserve"><value>Copy the path of the file or folder</value></data>
+  <data name="Command_CopyContent" xml:space="preserve"><value>Copy contents</value></data>
+  <data name="ToolTip_CopyEntryContent" xml:space="preserve"><value>Copy the contents of the file</value></data>
+  <data name="Status_ContentCopied" xml:space="preserve"><value>Contents of “{0}” copied to the clipboard.</value></data>
   <data name="State_EmptyBasket" xml:space="preserve"><value>The basket is empty</value></data>
   <data name="State_EmptyHint" xml:space="preserve"><value>Press Ctrl+V or drag files and folders into the window</value></data>
   <data name="Action_PasteFromClipboard" xml:space="preserve"><value>Paste from clipboard</value></data>

@@ -82,7 +82,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Assert.Equal(Path.Combine(_harness.Temp.BasketsRoot, tab.Uid), tab.DirectoryPath);
         Assert.True(Directory.Exists(tab.DirectoryPath));
         Assert.Empty(workspace.Files(string.Empty));
-        Assert.Equal(10, workspace.MaxTabCount);
+        Assert.Equal(100, workspace.MaxTabCount);
         Assert.True(workspace.CanCreateTab);
         Assert.False(workspace.CanCloseTab);
         Assert.Null(workspace.StatusMessage);
@@ -130,7 +130,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
     }
 
     [Fact]
-    public void CreateTab_StopsAtTenBaskets()
+    public void CreateTab_StopsAtOneHundredBaskets()
     {
         var workspace = _harness.CreateInitializedWorkspace();
         _harness.Clock.Now = TestMoments.TuesdayAfternoon;
@@ -140,14 +140,14 @@ public sealed class BasketWorkspaceTabTests : IDisposable
             Assert.NotNull(workspace.CreateTab());
         }
 
-        Assert.Equal(10, workspace.Tabs.Count);
+        Assert.Equal(100, workspace.Tabs.Count);
         Assert.False(workspace.CanCreateTab);
 
         var rejected = workspace.CreateTab();
 
         Assert.Null(rejected);
-        Assert.Equal(10, workspace.Tabs.Count);
-        Assert.Equal(10, Directory.GetDirectories(_harness.Temp.BasketsRoot).Length);
+        Assert.Equal(100, workspace.Tabs.Count);
+        Assert.Equal(100, Directory.GetDirectories(_harness.Temp.BasketsRoot).Length);
         Assert.NotNull(workspace.StatusMessage);
     }
 

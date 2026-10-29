@@ -14,7 +14,6 @@ public sealed record PreviewContent(string? Text = null, BitmapImage? Image = nu
 public sealed class PreviewLoader
 {
     private const int MaxTextCharacters = 64 * 1024;
-    private const int DecodePixelWidth = 480;
     private const string TruncationEllipsis = "\u2026";
 
     private CancellationTokenSource? _current;
@@ -59,7 +58,7 @@ public sealed class PreviewLoader
         cancellationToken.ThrowIfCancellationRequested();
         using var stream = await file.OpenReadAsync();
         cancellationToken.ThrowIfCancellationRequested();
-        var bitmap = new BitmapImage { DecodePixelWidth = DecodePixelWidth };
+        var bitmap = new BitmapImage();
         await bitmap.SetSourceAsync(stream);
         return bitmap;
     }

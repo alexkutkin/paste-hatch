@@ -108,8 +108,7 @@ try {
         (Find-Control 'BasketsList').Current.Name -eq (Resw 'en-US' 'Header_Baskets')
     }
     "ACTION open settings and switch language to Russian" | Add-Content (Join-Path $run 'actions.txt')
-    (Find-Control 'MoreButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-    Wait-For 'settings command reachable' { $null -ne (Find-Control 'SettingsButton') }
+    Wait-For 'settings command on the toolbar' { $null -ne (Find-Control 'SettingsButton') -and $null -eq (Find-Control 'MoreButton') }
     (Find-Control 'SettingsButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
     $script:settingsWindow = $null
     Wait-For 'settings window opened in English' {

@@ -50,7 +50,7 @@
   <data name="Error_FolderNameTotalTooLong" xml:space="preserve"><value>Слишком длинное имя папки.</value></data>
 
   <!-- Core: baskets, folders and materials -->
-  <data name="Status_BasketLimit" xml:space="preserve"><value>Достигнут предел в 10 корзин.</value></data>
+  <data name="Status_BasketLimit" xml:space="preserve"><value>Достигнут предел в 100 корзин.</value></data>
   <data name="Error_CreateBasket" xml:space="preserve"><value>Не удалось создать корзину: {0}</value></data>
   <data name="Status_LastBasket" xml:space="preserve"><value>Нельзя закрыть последнюю корзину.</value></data>
   <data name="Error_RecycleBasket" xml:space="preserve"><value>Не удалось отправить корзину в Корзину Windows: {0}</value></data>
@@ -151,6 +151,9 @@
   <data name="Action_Open" xml:space="preserve"><value>Открыть</value></data>
   <data name="ToolTip_OpenEntry" xml:space="preserve"><value>Открыть файл или папку</value></data>
   <data name="ToolTip_CopyEntryPath" xml:space="preserve"><value>Скопировать путь к файлу или папке</value></data>
+  <data name="Command_CopyContent" xml:space="preserve"><value>Скопировать содержимое</value></data>
+  <data name="ToolTip_CopyEntryContent" xml:space="preserve"><value>Скопировать содержимое файла</value></data>
+  <data name="Status_ContentCopied" xml:space="preserve"><value>Содержимое «{0}» скопировано в буфер обмена.</value></data>
   <data name="State_EmptyBasket" xml:space="preserve"><value>Корзина пуста</value></data>
   <data name="State_EmptyHint" xml:space="preserve"><value>Нажмите Ctrl+V или перетащите файлы и папки в окно</value></data>
   <data name="Action_PasteFromClipboard" xml:space="preserve"><value>Вставить из буфера</value></data>

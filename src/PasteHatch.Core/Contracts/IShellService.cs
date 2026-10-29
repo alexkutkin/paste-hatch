@@ -18,6 +18,9 @@ public interface IShellService
     /// <summary>Puts a plain-text value on the clipboard.</summary>
     void CopyText(string text);
 
+    /// <summary>Puts the picture of an image file on the clipboard.</summary>
+    void CopyImageToClipboard(string path);
+
     /// <summary>
     /// Puts files and folders on the clipboard as a standard file drop, so they can also be
     /// pasted into Explorer. <paramref name="move"/> marks a cut (Ctrl+X) instead of a copy.

@@ -16,4 +16,4 @@ Run scripts/verify.ps1. Readiness requires the actual UI and initialized storage
 
 The helper copies repo-grooming-skill/SKILL.md directly into Baskets, waits for its persisted basket and rail item without a refresh command, selects it and checks the tree and exact preview content. external-basket.ui.txt and external-basket.state.json record this result.
 
-The mutex is session-wide; isolated data roots do not allow parallel instances. The suite does not prove foreground activation, Ctrl+T, restart recovery, arbitrary switching, rename, reorder, close confirmation or the ten-basket limit. Both launches inherit offscreen mode; foreground behavior is intentionally unverified.
+The mutex is session-wide; isolated data roots do not allow parallel instances. The suite does not prove foreground activation, Ctrl+T, restart recovery, arbitrary switching, rename, reorder, close confirmation or the 100-basket limit. Both launches inherit offscreen mode; foreground behavior is intentionally unverified.

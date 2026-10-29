@@ -108,6 +108,8 @@ public sealed class EntryNode : INotifyPropertyChanged
 
     public Visibility EditVisibility => _isEditing ? Visibility.Visible : Visibility.Collapsed;
 
+    public Visibility ContentActionVisibility => IsFolder ? Visibility.Collapsed : Visibility.Visible;
+
     public double ActionsOpacity => _actionsPointerOver || _actionsFocused ? 1 : 0;
 
     public void SetActionsPointerOver(bool value)

@@ -8,7 +8,7 @@ Current behavior and structure belong in the README and architecture overview.
 - **Keep files on disk as the source of truth.** Losing application state must not lose
   materials. Basket renaming must preserve paths already handed to an agent; folders
   copied into the baskets root must remain accessible without moving or renaming them.
-- **Keep baskets in a left rail, with at most 10 open.** There must always be a usable
+- **Keep baskets in a left rail, with at most 100 open.** There must always be a usable
   basket, so the last one cannot close.
 - **Confirm recycling with Cancel as the default.** Recoverability through the Windows
   Recycle Bin does not replace the owner's requirement for an explicit confirmation.

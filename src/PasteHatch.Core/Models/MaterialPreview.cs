@@ -34,4 +34,37 @@ public static class MaterialPreview
         var read = reader.ReadBlock(buffer, 0, buffer.Length);
         return new string(buffer, 0, read);
     }
+
+    /// <summary>Reads a whole text file, detecting a byte order mark like <see cref="ReadText"/>.</summary>
+    public static string ReadAllText(string fullPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fullPath);
+
+        using var stream = new FileStream(
+            fullPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
+    }
+
+    /// <summary>
+    /// Returns the address stored in an Internet shortcut (<c>URL=</c> line); a file without one
+    /// is returned as text.
+    /// </summary>
+    public static string ReadLinkTarget(string fullPath)
+    {
+        var text = ReadAllText(fullPath);
+        foreach (var line in text.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("URL=", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed[4..];
+            }
+        }
+
+        return text;
+    }
 }

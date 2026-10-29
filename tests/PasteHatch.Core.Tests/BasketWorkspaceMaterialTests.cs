@@ -282,6 +282,70 @@ public sealed class BasketWorkspaceMaterialTests : IDisposable
     }
 
     [Fact]
+    public void CopyEntryContent_ForText_CopiesTheWholeText()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var material = PasteText(workspace, "line one\nline two");
+
+        workspace.CopyEntryContent(material);
+
+        Assert.Equal(new[] { "line one\nline two" }, _harness.Shell.CopiedTexts);
+        Assert.False(workspace.StatusIsError);
+    }
+
+    [Fact]
+    public void CopyEntryContent_ForLink_CopiesTheAddress()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var material = PasteText(workspace, "https://example.com/page?q=1");
+        Assert.Equal(MaterialKind.Link, material.Kind);
+
+        workspace.CopyEntryContent(material);
+
+        Assert.Equal(new[] { "https://example.com/page?q=1" }, _harness.Shell.CopiedTexts);
+    }
+
+    [Fact]
+    public void CopyEntryContent_ForImage_CopiesThePicture()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        _harness.Clipboard.Payload = PastePayload.FromImage([0x89, 0x50, 0x4E, 0x47]);
+        Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
+        var image = workspace.RequireSingleFile();
+
+        workspace.CopyEntryContent(image);
+
+        Assert.Equal(new[] { image.FullPath }, _harness.Shell.CopiedImages);
+        Assert.Empty(_harness.Shell.CopiedTexts);
+    }
+
+    [Fact]
+    public void CopyEntryContent_ForOtherFile_CopiesTheFile()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var path = Path.Combine(workspace.RequireActiveTab().DirectoryPath, "archive.zip");
+        File.WriteAllBytes(path, [1, 2, 3]);
+        var file = workspace.RequireSingleFile();
+
+        workspace.CopyEntryContent(file);
+
+        Assert.Equal(new[] { path }, _harness.Shell.CopiedFilePathSets);
+        Assert.Equal(new[] { false }, _harness.Shell.CopiedFileMoves);
+    }
+
+    [Fact]
+    public void CopyEntryContent_WhenShellFails_ReportsError()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var material = PasteText(workspace, "text");
+        _harness.Shell.CopyTextFailure = new InvalidOperationException("clipboard is busy");
+
+        workspace.CopyEntryContent(material);
+
+        workspace.RequireError();
+    }
+
+    [Fact]
     public void OpenActiveBasketFolder_OpensTheActiveBasketDirectory()
     {
         var workspace = _harness.CreateInitializedWorkspace();

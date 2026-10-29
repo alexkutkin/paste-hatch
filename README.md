@@ -30,13 +30,14 @@ files into the window. A screenshot becomes a PNG, text becomes a text file, and
 link becomes a `.url` file. Pasted files and folders keep their contents.
 
 Select a file to preview it. Text and Markdown appear as source; images appear in the
-preview panel. The buttons on a tree row open the item or copy its path. **Copy path** on
+preview panel at their actual size. The buttons on a tree row open the item, copy a
+file's contents (text, link address, picture or the file itself) or copy its path. **Copy path** on
 the command bar copies the current folder's path.
 
 Use the note field at the bottom to save a thought without opening an editor. Press
 `Enter` to save it in the current folder.
 
-You can keep up to 10 baskets, rename them and drag them into a different order. Changes
+You can keep up to 100 baskets, rename them and drag them into a different order. Changes
 made outside the app appear while its window is open. A folder copied directly into
 `Baskets` becomes a basket with the same name, provided there is a free slot.
 
@@ -121,7 +122,7 @@ closing a basket asks for confirmation and sends it to the Windows Recycle Bin.
 The last basket cannot be closed.
 
 Losing `state.json` does not delete your files. The app discovers basket folders again
-on startup, up to the 10-basket limit. Names stored only in the lost state file cannot
+on startup, up to the 100-basket limit. Names stored only in the lost state file cannot
 be recovered.
 
 ## Limits

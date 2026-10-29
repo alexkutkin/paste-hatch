@@ -50,7 +50,8 @@
             Grid.Row="0"
             Margin="8,4,8,0"
             DefaultLabelPosition="Right"
-            IsOpen="False">
+            IsOpen="False"
+            OverflowButtonVisibility="Collapsed">
             <AppBarButton
                 x:Name="PasteButton"
                 Click="OnPasteClick"
@@ -75,13 +76,12 @@
                 Icon="Copy"
                 Label="{Binding [Command_CopyPath], Source={StaticResource Loc}}"
                 ToolTipService.ToolTip="{Binding [ToolTip_CopyPath], Source={StaticResource Loc}}" />
-            <CommandBar.SecondaryCommands>
-                <AppBarButton
-                    x:Name="SettingsButton"
-                    Click="OnSettingsClick"
-                    Icon="Setting"
-                    Label="{Binding [Command_Settings], Source={StaticResource Loc}}" />
-            </CommandBar.SecondaryCommands>
+            <AppBarSeparator />
+            <AppBarButton
+                x:Name="SettingsButton"
+                Click="OnSettingsClick"
+                Icon="Setting"
+                Label="{Binding [Command_Settings], Source={StaticResource Loc}}" />
         </CommandBar>
 
         <Grid x:Name="WorkspaceGrid" Grid.Row="1" Margin="16,4,16,0" SizeChanged="OnWorkspaceSizeChanged">
@@ -316,7 +316,7 @@
                                         Grid.Column="2"
                                         Margin="0,0,8,0"
                                         Orientation="Horizontal"
-                                        Spacing="4"
+                                        Spacing="2"
                                         Opacity="{Binding Content.ActionsOpacity}"
                                         Visibility="{Binding Content.NameVisibility}"
                                         VerticalAlignment="Center">
@@ -331,6 +331,24 @@
                                             LostFocus="OnEntryActionLostFocus">
                                             <FontIcon FontSize="14" Glyph="&#xE8A7;" />
                                         </Button>
+                                        <Rectangle
+                                            Width="1"
+                                            Height="20"
+                                            Margin="6,0"
+                                            VerticalAlignment="Center"
+                                            Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                        <Button
+                                            x:Name="EntryCopyContentButton"
+                                            Width="32" Height="32" Padding="0"
+                                            AutomationProperties.Name="{Binding [Command_CopyContent], Source={StaticResource Loc}}"
+                                            ToolTipService.ToolTip="{Binding [ToolTip_CopyEntryContent], Source={StaticResource Loc}}"
+                                            Visibility="{Binding Content.ContentActionVisibility}"
+                                            Click="OnCopyEntryContentClick"
+                                            DoubleTapped="OnEntryActionDoubleTapped"
+                                            GotFocus="OnEntryActionGotFocus"
+                                            LostFocus="OnEntryActionLostFocus">
+                                            <FontIcon FontSize="14" Glyph="&#xE8C8;" />
+                                        </Button>
                                         <Button
                                             x:Name="EntryCopyPathButton"
                                             Width="32" Height="32" Padding="0"
@@ -340,7 +358,7 @@
                                             DoubleTapped="OnEntryActionDoubleTapped"
                                             GotFocus="OnEntryActionGotFocus"
                                             LostFocus="OnEntryActionLostFocus">
-                                            <FontIcon FontSize="14" Glyph="&#xE8C8;" />
+                                            <FontIcon FontSize="14" Glyph="&#xE71B;" />
                                         </Button>
                                     </StackPanel>
                                 </Grid>
@@ -417,6 +435,8 @@
                     <Grid Grid.Row="2">
                         <Image
                             x:Name="PreviewImage"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
                             Stretch="Uniform"
                             Visibility="Collapsed" />
                         <TextBox

@@ -76,12 +76,12 @@ Responsibility boundaries:
 - **Live refresh** is coordinated by `WorkspaceRefreshCoordinator`: watcher lifetime depends
   on window visibility and the active basket. A second, nonrecursive watcher observes the
   baskets root; visible folders copied there are adopted as baskets with their original names,
-  subject to the 10-basket limit. Stale notifications are dropped, errors cause
+  subject to the 100-basket limit. Stale notifications are dropped, errors cause
   a re-walk. Status messages do not rebuild the tree; content changes defer their own disk
   notifications. `IWorkspaceWatcher` is implemented by OS watching and a controllable test
   variant.
 
-- **PasteHatch.Core** knows nothing about WinUI: the domain rules (the 10-basket limit,
+- **PasteHatch.Core** knows nothing about WinUI: the domain rules (the 100-basket limit,
   "the last basket never closes", tree sorting and traversal, name collisions, type
   classification, UID, restore) and the contracts `IClipboardReader` / `IShellService` /
   `IConfirmationService` / `ITabStateStore`. Every basket item is one `BasketEntry` record with

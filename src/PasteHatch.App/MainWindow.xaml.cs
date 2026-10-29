@@ -1119,6 +1119,12 @@ public sealed partial class MainWindow : Window
             _workspace.CopyEntryPath(entry.Entry);
     }
 
+    private void OnCopyEntryContentClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TreeViewNode { Content: EntryNode entry } })
+            _workspace.CopyEntryContent(entry.Entry);
+    }
+
     private void OnEntryActionDoubleTapped(object sender, DoubleTappedRoutedEventArgs e) => e.Handled = true;
 
     private void OnTreeKeyDown(object sender, KeyRoutedEventArgs e)
@@ -1228,6 +1234,13 @@ public sealed partial class MainWindow : Window
         flyout.Items.Add(open);
         flyout.Items.Add(explore);
         flyout.Items.Add(copyPath);
+
+        if (!node.IsFolder)
+        {
+            var copyContent = new MenuFlyoutItem { Text = Localization.Text.Get("Command_CopyContent") };
+            copyContent.Click += (_, _) => _workspace.CopyEntryContent(node.Entry);
+            flyout.Items.Add(copyContent);
+        }
 
         if (!node.IsRoot)
         {
@@ -1418,6 +1431,10 @@ public sealed partial class MainWindow : Window
 
             if (content.Image is not null)
             {
+                // Never stretch past the native pixel size: one image pixel per screen pixel.
+                var scale = PreviewImage.XamlRoot?.RasterizationScale ?? 1;
+                PreviewImage.MaxWidth = content.Image.PixelWidth / scale;
+                PreviewImage.MaxHeight = content.Image.PixelHeight / scale;
                 PreviewImage.Source = content.Image;
                 PreviewImage.Visibility = Visibility.Visible;
             }

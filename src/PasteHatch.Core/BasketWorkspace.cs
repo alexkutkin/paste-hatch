@@ -4,13 +4,13 @@ namespace PasteHatch.Core;
 
 /// <summary>
 /// The application logic for baskets, folders, materials and tab state. It owns the invariants
-/// that the UI and the requirements depend on: at most 10 open baskets, always an active basket,
+/// that the UI and the requirements depend on: at most 100 open baskets, always an active basket,
 /// files on disk as the source of truth, and everything that leaves the app going through the
 /// Windows Recycle Bin only after a confirmation.
 /// </summary>
 public sealed class BasketWorkspace
 {
-    public const int MaxTabs = 10;
+    public const int MaxTabs = 100;
     public const int MaxTabNameLength = 120;
 
     private const string UidAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -760,6 +760,40 @@ public sealed class BasketWorkspace
         catch (Exception ex)
         {
             Fail(_text.Format("Error_CopyPath", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Copies what a material holds: the text of a text file, the address of a link, the picture
+    /// of an image. Any other file goes to the clipboard as a file, the way Explorer copies it.
+    /// </summary>
+    public void CopyEntryContent(BasketEntry entry)
+    {
+        if (entry.IsFolder) return;
+        try
+        {
+            switch (entry.Kind)
+            {
+                case MaterialKind.Text:
+                    _shell.CopyText(MaterialPreview.ReadAllText(entry.FullPath));
+                    break;
+                case MaterialKind.Link:
+                    _shell.CopyText(MaterialPreview.ReadLinkTarget(entry.FullPath));
+                    break;
+                case MaterialKind.Image:
+                    _shell.CopyImageToClipboard(entry.FullPath);
+                    break;
+                default:
+                    _shell.CopyFilesToClipboard([entry.FullPath], move: false);
+                    break;
+            }
+
+            SetStatus(_text.Format("Status_ContentCopied", entry.Name));
+            Publish();
+        }
+        catch (Exception ex)
+        {
+            Fail(_text.Format("Error_CopyToClipboard", ex.Message));
         }
     }
 

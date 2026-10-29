@@ -20,6 +20,8 @@ internal sealed class FakeShellService : IShellService
 
     public List<bool> CopiedFileMoves { get; } = [];
 
+    public List<string> CopiedImages { get; } = [];
+
     public Exception? OpenItemFailure { get; set; }
 
     public Exception? OpenFolderFailure { get; set; }
@@ -86,6 +88,16 @@ internal sealed class FakeShellService : IShellService
         }
 
         CopiedTexts.Add(text);
+    }
+
+    public void CopyImageToClipboard(string path)
+    {
+        if (CopyTextFailure is not null)
+        {
+            throw CopyTextFailure;
+        }
+
+        CopiedImages.Add(path);
     }
 
     public void CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)

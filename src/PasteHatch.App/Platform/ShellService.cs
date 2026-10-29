@@ -78,6 +78,26 @@ public sealed class ShellService : IShellService
     }
 
     /// <inheritdoc />
+    public void CopyImageToClipboard(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        // Bitmap for most targets plus the original PNG bytes, which keep transparency for apps
+        // that read the "PNG" format.
+        var bytes = File.ReadAllBytes(path);
+        using var source = new MemoryStream(bytes);
+        using var image = System.Drawing.Image.FromStream(source);
+        using var bitmap = new System.Drawing.Bitmap(image);
+        using var png = new MemoryStream();
+        bitmap.Save(png, System.Drawing.Imaging.ImageFormat.Png);
+
+        var data = new DataObject();
+        data.SetData(DataFormats.Bitmap, true, bitmap);
+        data.SetData("PNG", false, new MemoryStream(png.ToArray()));
+        SetClipboardData(data);
+    }
+
+    /// <inheritdoc />
     public void CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)
     {
         ArgumentNullException.ThrowIfNull(paths);
@@ -92,7 +112,11 @@ public sealed class ShellService : IShellService
         // Preferred DropEffect is what Explorer reads to decide between copy and cut.
         var effect = new MemoryStream(BitConverter.GetBytes(move ? 2u : 1u));
         data.SetData("Preferred DropEffect", effect);
+        SetClipboardData(data);
+    }
 
+    private static void SetClipboardData(DataObject data)
+    {
         for (var attempt = 0; ; attempt++)
         {
             try
