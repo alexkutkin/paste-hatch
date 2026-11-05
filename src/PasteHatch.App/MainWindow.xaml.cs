@@ -60,6 +60,7 @@ public sealed partial class MainWindow : Window
     private readonly BasketTreeNavigation _treeNavigation;
     private string? _basketSignature;
     private string? _editingBasketUid;
+    private (string Uid, string Path)? _pendingBasketFocus;
     private string? _presentedError;
     private string? _startupError;
     private bool _startupErrorReported;
@@ -885,6 +886,7 @@ public sealed partial class MainWindow : Window
         var tab = _workspace.ActiveTab;
         if (tab is null)
         {
+            _pendingBasketFocus = null;
             _selectedNode = null;
             EmptyStatePanel.Visibility = Visibility.Visible;
             ShowPreview(null);
@@ -914,6 +916,35 @@ public sealed partial class MainWindow : Window
         _selectedNode = selected.Content as EntryNode;
         UpdateSelection();
         EmptyStatePanel.Visibility = rootNode.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (view.IsBasketSwitch)
+        {
+            _pendingBasketFocus = _selectedNode is { IsRoot: false } ? (tab.Uid, view.Path) : null;
+        }
+        QueueBasketSelectionFocus();
+    }
+
+    private void QueueBasketSelectionFocus()
+    {
+        if (_pendingBasketFocus is not { } request) return;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (_isExiting || _pendingBasketFocus != request || _workspace.ActiveTab?.Uid != request.Uid) return;
+            if (FileTree.SelectedNode is not { Content: EntryNode entry } selected || entry.RelativePath != request.Path ||
+                !NativeWindow.IsForegroundWindow(GetWindowHandle()))
+            {
+                _pendingBasketFocus = null;
+                return;
+            }
+
+            FileTree.UpdateLayout();
+            FindDescendant<ScrollViewer>(FileTree)?.ChangeView(0, 0, null, disableAnimation: true);
+            FileTree.UpdateLayout();
+            if (FileTree.ContainerFromNode(selected) is Control container)
+            {
+                container.StartBringIntoView();
+                if (container.Focus(FocusState.Programmatic)) _pendingBasketFocus = null;
+            }
+        });
     }
 
     private void FillTreeNode(TreeViewNode node)
@@ -1025,6 +1056,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        _pendingBasketFocus = null;
         _selectedNode = FileTree.SelectedNode?.Content as EntryNode;
         if (FileTree.SelectedNode is { HasUnrealizedChildren: true } selectedNode)
         {

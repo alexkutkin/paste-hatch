@@ -3,8 +3,8 @@ namespace PasteHatch.Core;
 /// <summary>
 /// Owns tree state: the selected item and the expanded folders of every basket. The current folder
 /// is derived from the selection (a selected folder is current, a selected file's parent is current),
-/// so no caller has to keep a second copy in sync. Selection survives tree rebuilds and basket
-/// switches; when the selected path vanished from disk, it falls back to the nearest existing parent.
+/// so no caller has to keep a second copy in sync. Selection survives tree rebuilds; switching
+/// baskets selects their first root entry. Vanished paths fall back to the nearest existing parent.
 /// </summary>
 public sealed class BasketTreeNavigation(BasketWorkspace workspace)
 {
@@ -42,6 +42,7 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
     /// </summary>
     public TreeSelection Reconcile(BasketEntry? displayedSelection, IReadOnlyCollection<string> displayedExpanded)
     {
+        var isBasketSwitch = _displayedUid is not null && _displayedUid != workspace.ActiveTab?.Uid;
         if (_displayedUid is not null)
         {
             Capture(displayedSelection, displayedExpanded, _displayedUid);
@@ -62,7 +63,7 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
         var view = _views.GetValueOrDefault(tab.Uid)
             ?? new TreeSelection(workspace.SavedFolderFor(tab.Uid), workspace.SavedFolderFor(tab.Uid), []);
 
-        var path = view.Path;
+        var path = isBasketSwitch ? workspace.GetEntries(string.Empty).FirstOrDefault()?.RelativePath ?? string.Empty : view.Path;
         BasketEntry? entry;
         while ((entry = Find(path)) is null && path.Length > 0)
         {
@@ -75,7 +76,7 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
 
         var reconciled = new TreeSelection(path, FolderOf(entry), expanded);
         _views[tab.Uid] = reconciled;
-        return reconciled;
+        return reconciled with { IsBasketSwitch = isBasketSwitch };
     }
 
     /// <summary>Records the item the user selected in the displayed tree.</summary>
@@ -142,7 +143,11 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
 }
 
 /// <summary>What to select and expand when a basket's tree is rendered.</summary>
-public sealed record TreeSelection(string Path, string Folder, IReadOnlyList<string> ExpandedPaths);
+public sealed record TreeSelection(string Path, string Folder, IReadOnlyList<string> ExpandedPaths)
+{
+    /// <summary>True only for the reconciliation that changes the displayed basket.</summary>
+    public bool IsBasketSwitch { get; init; }
+}
 
 public sealed record FolderCrumb(string Label, string RelativePath)
 {

@@ -4,6 +4,10 @@
 
 Initialize a usable first basket from empty storage; create and activate a second basket; discover a named folder copied directly into Baskets and open its contents; reject a second process while the first survives.
 
+Switching baskets automatically selects their first root entry in the ordinary tree order
+and shows its preview. Returning to a basket replaces its previous manual item selection;
+a watcher refresh within the same basket preserves that selection.
+
 ## How to get to it (user POV)
 
 Launch PasteHatch. Choose + (Create basket) in the rail or Ctrl+T to add a basket. Launch again to show the existing instance.
@@ -15,5 +19,11 @@ Run scripts/verify.ps1. Readiness requires the actual UI and initialized storage
 ## Gotchas
 
 The helper copies repo-grooming-skill/SKILL.md directly into Baskets, waits for its persisted basket and rail item without a refresh command, selects it and checks the tree and exact preview content. external-basket.ui.txt and external-basket.state.json record this result.
+
+The initial file preview is checked without selecting the file manually. The helper then
+selects Z-last.txt, adds A-first.txt externally, and verifies the watcher preserves Z-last.txt.
+Switching to the original basket selects folder2, and returning selects A-first.txt and its
+exact preview. This offscreen journey proves selection and preview, not native keyboard
+focus in an inactive window. Focus requires a foreground test on an isolated desktop.
 
 Offscreen launches with an explicit data root use an isolated mutex and event; both test launches inherit the same root. The suite does not prove foreground activation, Ctrl+T, application restart recovery, arbitrary switching, rename, reorder, close confirmation or the 100-basket limit. Both launches inherit offscreen mode; foreground behavior is intentionally unverified.

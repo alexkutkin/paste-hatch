@@ -30,5 +30,4 @@ Relocating an item to another folder, removing the source location after the mov
 succeeds. Moving to the same folder changes nothing.
 
 **Tree state**:
-The selected item and the expanded folders of a basket. It defines the current folder and
-is restored on tree refresh and on basket switches.
+The selected item and the expanded folders of a basket. It defines the current folder.

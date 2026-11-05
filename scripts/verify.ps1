@@ -49,6 +49,12 @@ function Find-Node([string]$Name) {
             [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$Name),
             [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::TreeItem)))
 }
+function Find-BasketRow([string]$Name) {
+    (Find-Control 'BasketsList').FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.AndCondition]::new(
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$Name),
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ListItem)))
+}
 function Resw([string]$Language, [string]$Key) {
     $doc = [xml](Get-Content (Join-Path $repo "src/PasteHatch.App/Strings/$Language/Resources.resw") -Raw -Encoding UTF8)
     ($doc.root.data | Where-Object { $_.name -eq $Key }).value
@@ -312,10 +318,44 @@ try {
     }
     $externalRow.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
     Wait-For 'copied basket contents appear in tree' { $null -ne (Find-Node 'SKILL.md') }
-    Select-Node 'SKILL.md'
-    Wait-For 'copied basket file preview preserves content' {
+    Wait-For 'basket switch selects and previews its first file automatically' {
+        $node = Find-Node 'SKILL.md'
         $preview = Find-Control 'PreviewText'
+        $null -ne $node -and $node.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected -and
         $null -ne $preview -and $preview.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'external folder content'
+    }
+    $externalBasketPath = Join-Path $data 'Baskets\repo-grooming-skill'
+    [IO.File]::WriteAllText((Join-Path $externalBasketPath 'Z-last.txt'),'manual selection content')
+    Wait-For 'second file appears in the current basket' { $null -ne (Find-Node 'Z-last.txt') }
+    Select-Node 'Z-last.txt'
+    Wait-For 'manual file selection displays its contents' {
+        $preview = Find-Control 'PreviewText'
+        $null -ne $preview -and $preview.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'manual selection content'
+    }
+    [IO.File]::WriteAllText((Join-Path $externalBasketPath 'A-first.txt'),'automatic first file content')
+    Wait-For 'same basket watcher refresh retains the manually selected file' {
+        $node = Find-Node 'Z-last.txt'
+        $preview = Find-Control 'PreviewText'
+        $null -ne (Find-Node 'A-first.txt') -and $null -ne $node -and
+        $node.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected -and
+        $null -ne $preview -and $preview.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'manual selection content'
+    }
+    $otherBasketRow = (Find-Control 'BasketsList').FindAll([System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ListItem)) |
+        Where-Object { $_.Current.Name -ne 'repo-grooming-skill' } | Select-Object -First 1
+    $otherBasketRow.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Wait-For 'switching to the original basket selects its first root folder' {
+        $state = Get-Content (Join-Path $data 'state.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $firstFolder = Find-Node 'folder2'
+        ($state.tabs | Where-Object uid -EQ $state.activeUid).directoryName -ne 'repo-grooming-skill' -and
+        $null -ne $firstFolder -and $firstFolder.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected
+    }
+    (Find-BasketRow 'repo-grooming-skill').GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Wait-For 'returning to a basket selects its first file instead of the previous manual selection' {
+        $node = Find-Node 'A-first.txt'
+        $preview = Find-Control 'PreviewText'
+        $null -ne $node -and $node.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected -and
+        $null -ne $preview -and $preview.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'automatic first file content'
     }
     Invoke-Control 'CopyPathButton'
     Wait-For 'basket root copy enters history without basket activation history' {

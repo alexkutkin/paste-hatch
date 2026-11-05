@@ -82,7 +82,10 @@ Responsibility boundaries:
   the basket UID, and the current folder is derived from the selection (a selected folder is
   current, a selected file's parent is current), so no other module keeps a copy of it.
   Operations receive the folder explicitly and the state file records it. A vanished selected
-  path falls back to the nearest existing parent. WinUI builds nodes lazily, renders the
+  path falls back to the nearest existing parent. Switching baskets selects the first root
+  entry in the existing sort order; initial startup retains saved-folder restoration and
+  same-basket refresh retains the selected item. WinUI focuses the realized selected row
+  after a basket switch while the window is active. WinUI builds nodes lazily, renders the
   breadcrumb prepared by the navigation and reconciles the tree with one call.
 - **Live refresh** is coordinated by `WorkspaceRefreshCoordinator`: watcher lifetime depends
   on window visibility and the active basket. A second, nonrecursive watcher observes the

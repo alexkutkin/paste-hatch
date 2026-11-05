@@ -52,6 +52,8 @@ public static class NativeWindow
 
     public static bool IsVisible(IntPtr hwnd) => hwnd != IntPtr.Zero && IsWindowVisible(hwnd);
 
+    public static bool IsForegroundWindow(IntPtr hwnd) => hwnd != IntPtr.Zero && GetForegroundWindow() == hwnd;
+
     /// <summary>
     /// True when the window exists but is minimized. A minimized window is still "visible" in
     /// Win32 terms, so callers must check this before treating it as a window the user can see.
@@ -230,6 +232,9 @@ public static class NativeWindow
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

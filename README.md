@@ -46,6 +46,9 @@ drag them into a different order. Changes made outside the app appear while its 
 is open. A folder copied directly into
 `Baskets` becomes a basket with the same name, provided there is a free slot.
 
+Switching baskets selects and focuses the first root item in the tree's usual order,
+showing its preview immediately. Refreshing files in the current basket keeps your selection.
+
 <p align="center">
   <a href="docs/images/bug-report.png">
     <img src="docs/images/bug-report.png" alt="A separate basket with a bug report and reproduction steps" width="900" />
