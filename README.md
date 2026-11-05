@@ -26,8 +26,10 @@ an ordinary folder on your computer. Copy its path and give it to your agent.
 ## Use
 
 Click the tray icon to open PasteHatch. Pick a basket, then paste with `Ctrl+V` or drop
-files into the window. A screenshot becomes a PNG, text becomes a text file, and a web
-link becomes a `.url` file. Pasted files and folders keep their contents.
+files into the window. A screenshot becomes a PNG, text becomes a text file named after
+its first five words (text starting with `Weekly report for the team` is saved as
+`Weekly_report_for_the_team.txt`),
+and a web link becomes a `.url` file. Pasted files and folders keep their contents.
 
 Select a file to preview it. Text and Markdown appear as source; images appear in the
 preview panel at their actual size. The buttons on a tree row open the item, copy a

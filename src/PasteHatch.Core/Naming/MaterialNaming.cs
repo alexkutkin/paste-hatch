@@ -40,6 +40,22 @@ public static class MaterialNaming
         return candidate;
     }
 
+    /// <summary>Maximum number of leading words used to name a pasted text document.</summary>
+    public const int PastedTextNameWords = 5;
+
+    /// <summary>
+    /// Collision-free ".txt" name for pasted text: its first <see cref="PastedTextNameWords"/>
+    /// words joined with underscores, or <paramref name="fallbackBaseName"/> when the text has
+    /// no usable word.
+    /// </summary>
+    public static string PastedTextFileName(string directory, string text, string fallbackBaseName, ITextProvider textProvider)
+    {
+        var baseName = NameFromWords(text, PastedTextNameWords);
+        return baseName is null
+            ? DefaultFileName(directory, fallbackBaseName, ".txt", textProvider)
+            : UniqueFileName(directory, baseName + ".txt", textProvider);
+    }
+
     public static string DefaultFileName(string directory, string format, string extension, ITextProvider text)
     {
         // Defence in depth: callers normally pass TabNameFormatter.FormatAsFileName, but a colon
