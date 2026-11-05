@@ -7,7 +7,18 @@ The diagrams match the implemented application. Stack and decision rationale:
   SDK runtime install), Windows 10 1809+ / Windows 11.
 - **Storage:** basket folders and a JSON state file in `%LOCALAPPDATA%\PasteHatch`; the
   file system is the source of truth, `state.json` keeps basket order, basket names, the
-  active basket, each basket's selected folder and window geometry.
+  active basket, each basket's selected folder, recent copied filesystem paths and window geometry.
+
+Each basket has a stable UID independent of its mutable directory name. State version 4
+persists their association; older files are upgraded at the read boundary without renaming
+existing directories. Explicit rename moves the directory and records a durable rename intent
+before the move so interrupted state writes can recover the association on startup. Paths
+copied before a rename remain literal historical values and may become stale.
+
+Raw pasted text uses its first five words for a Windows-safe, collision-free `.txt` filename.
+Quick Note, URL and image naming retain their separate existing rules. Basket deletion uses
+one preference-aware policy with confirmation enabled by default; files and nested folders
+retain their own confirmations.
 
 The right panel width is stored in `state.json` as `previewWidth` in logical pixels. It is
 saved after a drag ends and restored on startup; in a narrow window the shown width is
@@ -90,6 +101,8 @@ Responsibility boundaries:
 - **PasteHatch.App/Platform** implements those contracts with native Windows means
   (WinForms `TaskDialog`/`NotifyIcon`/`Clipboard`, `Microsoft.VisualBasic.FileIO` for the
   Recycle Bin, Win32 `SetWindowPos`/monitor/pin, `Mutex`+event for the single instance).
+  Offscreen verification with an explicit data root scopes its mutex and event to that root,
+  allowing disposable UI checks beside the owner's normal instance without activating it.
 - **PasteHatch.App** is the view: standard WinUI 3 controls (`ListView` rail, `CommandBar`,
   `TreeView`, `BreadcrumbBar`, `TextBox`, `Image`, `InfoBar`, `MenuFlyout`) and the standard
   window title bar; system light/dark theme; a separate settings window on `ToggleSwitch`.

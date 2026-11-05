@@ -27,18 +27,23 @@ an ordinary folder on your computer. Copy its path and give it to your agent.
 
 Click the tray icon to open PasteHatch. Pick a basket, then paste with `Ctrl+V` or drop
 files into the window. A screenshot becomes a PNG, text becomes a text file, and a web
-link becomes a `.url` file. Pasted files and folders keep their contents.
+link becomes a `.url` file. Pasted text filenames use the first five words, with underscores
+between them. Pasted files and folders keep their original names and contents.
 
 Select a file to preview it. Text and Markdown appear as source; images appear in the
 preview panel at their actual size. The buttons on a tree row open the item, copy a
 file's contents (text, link address, picture or the file itself) or copy its path. **Copy path** on
-the command bar copies the current folder's path.
+the command bar copies the current folder's path. Right-click the tray icon to copy one of
+the five most recently copied filesystem paths again. Menu labels show the basket and final
+filename; the tooltip shows the complete path. Repeated copies are kept as separate events.
+Double-click a filename to rename it inline; double-click elsewhere on its row to open it.
 
 Use the note field at the bottom to save a thought without opening an editor. Press
 `Enter` to save it in the current folder.
 
-You can keep up to 100 baskets, rename them and drag them into a different order. Changes
-made outside the app appear while its window is open. A folder copied directly into
+You can keep up to 100 baskets, create them from either end of the rail, rename them and
+drag them into a different order. Changes made outside the app appear while its window
+is open. A folder copied directly into
 `Baskets` becomes a basket with the same name, provided there is a free slot.
 
 <p align="center">
@@ -70,7 +75,8 @@ is available in Settings.
 
 Closing the window hides it in the tray. Right-click the tray icon and choose **Exit**
 to quit. Settings also has options to start in the tray, remember the window position
-and keep the window on top.
+and keep the window on top. Basket deletion confirmation is enabled by default and can be
+disabled in Settings. Press `Delete` on a focused basket to recycle it.
 
 ## Build and run
 
@@ -114,12 +120,15 @@ Data lives in `%LOCALAPPDATA%\PasteHatch`:
 | Location | Contents |
 | --- | --- |
 | `Baskets\` | Basket folders and your files |
-| `state.json` | Basket names, order, current folders and window layout |
-| `settings.json` | Language and window settings |
+| `state.json` | Basket identities and folders, names, order, current folders, copied-path history and window layout |
+| `settings.json` | Language, window settings and basket deletion confirmation |
 
-Renaming a basket in the app does not change its folder path. Deleting an item or
-closing a basket asks for confirmation and sends it to the Windows Recycle Bin.
-The last basket cannot be closed.
+Explicitly renaming a basket also renames its folder, replacing spaces between words with
+underscores and preserving Cyrillic characters. Paths copied before the rename may become
+stale; history preserves their original values. Upgrading leaves existing folder names alone.
+Deleting an item or closing a basket sends it to the Windows Recycle Bin. Basket confirmation
+follows its setting; files and nested folders still require confirmation. The last basket
+cannot be closed.
 
 Losing `state.json` does not delete your files. The app discovers basket folders again
 on startup, up to the 100-basket limit. Names stored only in the lost state file cannot
@@ -143,7 +152,7 @@ dotnet test tests\PasteHatch.Core.Tests
 ```
 
 The UI smoke check runs against separate test data and restores the clipboard afterward.
-Close PasteHatch through the tray first, and avoid copying while it runs.
+Its offscreen instance is isolated from the normal running app; avoid copying while it runs.
 
 ```powershell
 powershell -STA -ExecutionPolicy Bypass -File scripts\verify.ps1 -Configuration Release

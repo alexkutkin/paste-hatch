@@ -6,12 +6,15 @@ Current behavior and structure belong in the README and architecture overview.
 - **Use native Fluent controls and the system theme.** A custom visual language is outside
   the product scope.
 - **Keep files on disk as the source of truth.** Losing application state must not lose
-  materials. Basket renaming must preserve paths already handed to an agent; folders
-  copied into the baskets root must remain accessible without moving or renaming them.
+  materials. Explicit basket renaming also renames its physical folder and may invalidate
+  paths already handed to an agent; its internal identity remains stable. Upgrades do not
+  automatically rename existing folders. Folders copied into the baskets root must remain
+  accessible without moving or renaming them.
 - **Keep baskets in a left rail, with at most 100 open.** There must always be a usable
   basket, so the last one cannot close.
-- **Confirm recycling with Cancel as the default.** Recoverability through the Windows
-  Recycle Bin does not replace the owner's requirement for an explicit confirmation.
+- **Make basket recycling confirmation configurable.** Confirm by default with Cancel as
+  the default response; allow the owner to disable basket confirmation. Recycling still
+  uses the Windows Recycle Bin. File and nested-folder confirmations remain separate.
 - **Use one tray instance and one state writer.** Routine launches should avoid desktop
   clutter; the first launch must show enough UI for the app to be discoverable.
 - **Give every action a keyboard path.** Commands must remain discoverable outside context
