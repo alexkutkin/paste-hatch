@@ -68,7 +68,8 @@ Responsibility boundaries:
   path checks, collision handling and partial-success handling. `BasketWorkspace` publishes
   the final result and holds the copy/cut intent; the window passes user actions through.
 - **Tree state** is held by `BasketTreeNavigation`: selection and expanded folders belong to
-  the basket UID, and the current folder is derived from the selection (a selected folder is
+  the basket UID (a stable identity; the folder name is stored separately and changes on an
+  explicit rename), and the current folder is derived from the selection (a selected folder is
   current, a selected file's parent is current), so no other module keeps a copy of it.
   Operations receive the folder explicitly and the state file records it. A vanished selected
   path falls back to the nearest existing parent. WinUI builds nodes lazily, renders the

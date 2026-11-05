@@ -262,14 +262,72 @@ public sealed class BasketWorkspace
             trimmed = trimmed[..MaxTabNameLength].TrimEnd();
         }
 
-        if (string.Equals(_tabs[index].DisplayName, trimmed, StringComparison.Ordinal))
+        var current = _tabs[index];
+        var folderName = MaterialNaming.NameFromWords(trimmed);
+        if (folderName is null)
+        {
+            Fail(_text.Get("Error_BasketFolderNoWords"));
+            return false;
+        }
+
+        var targetPath = Path.Combine(_basketsRoot, folderName);
+        var moveFolder = !string.Equals(current.DirectoryPath, targetPath, StringComparison.Ordinal);
+        if (!moveFolder && string.Equals(current.DisplayName, trimmed, StringComparison.Ordinal))
         {
             return true;
         }
 
-        _tabs[index] = _tabs[index] with { DisplayName = trimmed };
-        Commit(WorkspaceChangeKind.View);
+        if (moveFolder && !TryMoveBasketFolder(current.DirectoryPath, targetPath))
+        {
+            return false;
+        }
+
+        _tabs[index] = current with { DisplayName = trimmed, DirectoryPath = targetPath };
+        Commit(moveFolder ? WorkspaceChangeKind.Contents : WorkspaceChangeKind.View);
         return true;
+    }
+
+    /// <summary>
+    /// Renames a basket folder without merging into or overwriting another folder. A case-only
+    /// rename goes through a temporary name; if the second step fails the folder is moved back.
+    /// </summary>
+    private bool TryMoveBasketFolder(string sourcePath, string targetPath)
+    {
+        var caseOnly = string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase);
+        if (!caseOnly && (Directory.Exists(targetPath) || File.Exists(targetPath)))
+        {
+            Fail(_text.Format("Error_BasketFolderExists", Path.GetFileName(targetPath)));
+            return false;
+        }
+
+        try
+        {
+            if (caseOnly)
+            {
+                var temporaryPath = Path.Combine(_basketsRoot, $"{Path.GetFileName(sourcePath)}.renaming-{Guid.NewGuid():N}");
+                Directory.Move(sourcePath, temporaryPath);
+                try
+                {
+                    Directory.Move(temporaryPath, targetPath);
+                }
+                catch
+                {
+                    Directory.Move(temporaryPath, sourcePath);
+                    throw;
+                }
+            }
+            else
+            {
+                Directory.Move(sourcePath, targetPath);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Fail(_text.Format("Error_RenameBasketFolder", ex.Message));
+            return false;
+        }
     }
 
     /// <summary>Confirms, recycles the basket folder, then removes the tab.</summary>
@@ -837,8 +895,10 @@ public sealed class BasketWorkspace
     private void LoadTabs(WorkspaceState state)
     {
         var savedTabs = state.Tabs
-            .Where(tab => !string.IsNullOrWhiteSpace(tab.Uid))
+            .Where(tab => !string.IsNullOrWhiteSpace(tab.Uid) && IsPlainFolderName(tab.Folder))
             .GroupBy(tab => tab.Uid, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .GroupBy(tab => tab.Folder, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First());
 
         foreach (var saved in savedTabs)
@@ -848,7 +908,7 @@ public sealed class BasketWorkspace
                 break;
             }
 
-            var directoryPath = Path.Combine(_basketsRoot, saved.Uid);
+            var directoryPath = Path.Combine(_basketsRoot, saved.Folder);
             if (!Directory.Exists(directoryPath))
             {
                 continue;
@@ -869,7 +929,7 @@ public sealed class BasketWorkspace
         // are still user baskets, so they are adopted instead of being left unreachable.
         var orphanDirectories = new DirectoryInfo(_basketsRoot)
             .EnumerateDirectories("*", ChildEntriesOptions)
-            .Where(info => _tabs.All(tab => !string.Equals(tab.Uid, info.Name, StringComparison.OrdinalIgnoreCase)))
+            .Where(info => _tabs.All(tab => !string.Equals(FolderNameOf(tab), info.Name, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(info => info.CreationTimeUtc)
             .ThenBy(info => info.Name, StringComparer.Ordinal);
 
@@ -881,13 +941,20 @@ public sealed class BasketWorkspace
             }
 
             _tabs.Add(new BasketTab(
-                directory.Name,
+                GenerateUid(),
                 UidPattern.IsMatch(directory.Name) ? DefaultNameFor(directory.FullName) : directory.Name,
                 directory.FullName));
             adopted = true;
         }
         return adopted;
     }
+
+    private static string FolderNameOf(BasketTab tab) => Path.GetFileName(tab.DirectoryPath);
+
+    private static bool IsPlainFolderName(string? folder) =>
+        !string.IsNullOrWhiteSpace(folder) &&
+        folder is not "." and not ".." &&
+        folder.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
     private BasketTab CreateBasketInternal()
     {
@@ -1094,6 +1161,7 @@ public sealed class BasketWorkspace
                 Tabs = _tabs.Select(tab => new TabState
                 {
                     Uid = tab.Uid,
+                    Folder = Path.GetFileName(tab.DirectoryPath),
                     Name = tab.DisplayName,
                     SelectedFolder = _currentFolderOf(tab),
                 }).ToList(),

@@ -53,6 +53,9 @@
   <data name="Status_BasketLimit" xml:space="preserve"><value>Достигнут предел в 100 корзин.</value></data>
   <data name="Error_CreateBasket" xml:space="preserve"><value>Не удалось создать корзину: {0}</value></data>
   <data name="Status_LastBasket" xml:space="preserve"><value>Нельзя закрыть последнюю корзину.</value></data>
+  <data name="Error_BasketFolderNoWords" xml:space="preserve"><value>Имя корзины должно содержать хотя бы одну букву или цифру для имени её папки.</value></data>
+  <data name="Error_BasketFolderExists" xml:space="preserve"><value>Папка «{0}» уже существует в папке корзин. Выберите другое имя.</value></data>
+  <data name="Error_RenameBasketFolder" xml:space="preserve"><value>Не удалось переименовать папку корзины: {0}</value></data>
   <data name="Error_RecycleBasket" xml:space="preserve"><value>Не удалось отправить корзину в Корзину Windows: {0}</value></data>
   <data name="Status_BasketRecycled" xml:space="preserve"><value>Корзина «{0}» отправлена в Корзину Windows.</value></data>
   <data name="Error_Navigate" xml:space="preserve"><value>Не удалось перейти в папку.</value></data>
