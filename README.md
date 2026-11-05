@@ -117,7 +117,10 @@ Data lives in `%LOCALAPPDATA%\PasteHatch`:
 | `state.json` | Basket names, order, current folders and window layout |
 | `settings.json` | Language and window settings |
 
-Renaming a basket in the app does not change its folder path. Deleting an item or
+Renaming a basket also renames its folder: the words of the new name are joined with
+underscores, so `My Basket` lives in `Baskets\My_Basket`. Paths copied before the rename
+stop pointing at the basket. If another folder already has that name, the rename is refused.
+Deleting an item or
 closing a basket asks for confirmation and sends it to the Windows Recycle Bin.
 The last basket cannot be closed.
 

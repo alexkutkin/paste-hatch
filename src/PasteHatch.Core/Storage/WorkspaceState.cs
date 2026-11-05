@@ -4,10 +4,12 @@ namespace PasteHatch.Core;
 public sealed class WorkspaceState
 {
     /// <summary>
+    /// Version 4 separated the stable basket UID from its folder name (<see cref="TabState.Folder"/>);
+    /// older files are upgraded on load by treating the UID as the folder name.
     /// Version 3 replaced the flat <c>materialOrder</c> list with a per-tab selected folder.
     /// Version 2 files still load: the order is ignored, the files themselves are untouched.
     /// </summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     public int Version { get; set; } = CurrentVersion;
 
@@ -24,10 +26,13 @@ public sealed class WorkspaceState
 
 public sealed class TabState
 {
-    /// <summary>Folder name of the basket inside the baskets root.</summary>
+    /// <summary>Stable basket identity; it never changes when the basket folder is renamed.</summary>
     public string Uid { get; set; } = string.Empty;
 
-    /// <summary>User-visible tab name; the basket folder name remains the on-disk identity.</summary>
+    /// <summary>Folder name of the basket inside the baskets root; changes on an explicit rename.</summary>
+    public string Folder { get; set; } = string.Empty;
+
+    /// <summary>User-visible tab name.</summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>

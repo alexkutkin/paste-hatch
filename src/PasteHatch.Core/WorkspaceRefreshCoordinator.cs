@@ -17,6 +17,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     private EventHandler? _changed;
     private EventHandler? _error;
     private string? _watchedUid;
+    private string? _watchedPath;
     private long _generation;
     private bool _visible;
     private bool _disposed;
@@ -60,7 +61,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     {
         if (_startingWatch) return;
         var tab = _visible ? _workspace.ActiveTab : null;
-        if (tab?.Uid == _watchedUid) return;
+        if (tab?.Uid == _watchedUid && tab?.DirectoryPath == _watchedPath) return;
         StopWatch();
         if (tab is null) return;
         var generation = _generation;
@@ -76,6 +77,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
             _watcher.Watch(tab.DirectoryPath);
             _rootWatcher.Watch(_workspace.BasketsRoot, includeSubdirectories: false);
             _watchedUid = tab.Uid;
+            _watchedPath = tab.DirectoryPath;
         }
         catch (Exception ex)
         {
@@ -135,6 +137,7 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         _watcher.Stop();
         _rootWatcher.Stop();
         _watchedUid = null;
+        _watchedPath = null;
         _diskDirty = _watchFailed = false;
     }
 

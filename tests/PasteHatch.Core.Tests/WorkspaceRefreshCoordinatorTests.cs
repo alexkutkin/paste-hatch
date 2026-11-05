@@ -34,13 +34,13 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         _harness.Temp.CreateBasketDirectory("repo-grooming-skill");
         _rootWatcher.Notify();
         Drain();
-        Assert.Contains(workspace.Tabs, tab => tab.Uid == "repo-grooming-skill");
+        Assert.Contains(workspace.Tabs, tab => Path.GetFileName(tab.DirectoryPath) == "repo-grooming-skill");
         coordinator.SetVisible(false);
         Assert.Null(_rootWatcher.Path);
         _harness.Temp.CreateBasketDirectory("while-hidden");
         coordinator.SetVisible(true);
         Drain();
-        Assert.Contains(workspace.Tabs, tab => tab.Uid == "while-hidden");
+        Assert.Contains(workspace.Tabs, tab => Path.GetFileName(tab.DirectoryPath) == "while-hidden");
     }
 
     [Fact]
@@ -155,6 +155,22 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         workspace.ReportStatus("next");
         Drain();
         Assert.Equal(new[] { true }, _renders);
+    }
+
+    [Fact]
+    public void RenamingTheActiveBasketFolder_MovesTheWatcherToTheNewFolder()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        using var coordinator = Create(workspace);
+        coordinator.SetVisible(true);
+        Drain();
+        var tab = workspace.RequireActiveTab();
+        Assert.Equal(tab.DirectoryPath, _watcher.Path);
+
+        Assert.True(workspace.RenameTab(tab.Uid, "My Basket"));
+        Drain();
+
+        Assert.Equal(Path.Combine(_harness.Temp.BasketsRoot, "My_Basket"), _watcher.Path);
     }
 
     private sealed class FakeWatcher : IWorkspaceWatcher
