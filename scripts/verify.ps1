@@ -203,12 +203,15 @@ try {
         $rowCopy.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
         Wait-For "row copy path equals $($entry.name) path" { [Windows.Forms.Clipboard]::GetText() -eq $entry.path }
     }
-    $expectedPaste = 'pasted-' + [guid]::NewGuid().ToString('N')
+    $pasteId = [guid]::NewGuid().ToString('N')
+    $cyrillicWord = [string]::new([char[]]@(0x041F,0x0440,0x0438,0x0432,0x0435,0x0442))
+    $expectedPaste = "$cyrillicWord, weekly report: pasted $pasteId and more words"
+    $expectedPasteName = "${cyrillicWord}_weekly_report_pasted_$pasteId.txt"
     "ACTION clipboard text=$expectedPaste" | Add-Content (Join-Path $run 'actions.txt')
     [Windows.Forms.Clipboard]::SetText($expectedPaste)
     Invoke-Control 'PasteButton'
-    Wait-For 'paste writes exact text into selected folder' {
-        @(Get-ChildItem (Join-Path $basket 'folder2') -Filter '*.txt' | Where-Object { [IO.File]::ReadAllText($_.FullName) -eq $expectedPaste }).Count -eq 1
+    Wait-For 'paste writes exact text into selected folder named from its first five words' {
+        @(Get-ChildItem (Join-Path $basket 'folder2') -Filter '*.txt' | Where-Object { $_.Name -eq $expectedPasteName -and [IO.File]::ReadAllText($_.FullName) -eq $expectedPaste }).Count -eq 1
     }
     $source = Join-Path $data 'source-folder'
     New-Item -ItemType Directory -Path (Join-Path $source 'deep') | Out-Null

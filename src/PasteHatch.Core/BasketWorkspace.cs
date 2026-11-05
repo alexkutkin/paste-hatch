@@ -1078,10 +1078,10 @@ public sealed class BasketWorkspace
                 return 1;
             }
 
-            var textFileName = MaterialNaming.DefaultFileName(
+            var textFileName = MaterialNaming.PastedTextFileName(
                 targetDirectory,
+                text,
                 _formatter.FormatAsFileName(_clock.Now),
-                ".txt",
                 _text);
             File.WriteAllText(
                 Path.Combine(targetDirectory, textFileName),

@@ -18,7 +18,7 @@ public sealed class BasketWorkspaceMaterialTests : IDisposable
         Assert.True(renamed);
         var renamedPath = Path.Combine(directory, "note.txt");
         FileAssert.HasUtf8TextWithoutBom(renamedPath, "original text");
-        FileAssert.DoesNotExist(Path.Combine(directory, "Mon, 13-02.txt"));
+        FileAssert.DoesNotExist(Path.Combine(directory, "original_text.txt"));
         var refreshed = workspace.RequireSingleFile();
         Assert.Equal("note.txt", refreshed.Name);
         Assert.Equal(renamedPath, refreshed.FullPath);
@@ -62,8 +62,8 @@ public sealed class BasketWorkspaceMaterialTests : IDisposable
         var error = workspace.RequireError();
         Assert.NotNull(error);
         Assert.NotNull(workspace.StatusMessage);
-        FileAssert.Exists(Path.Combine(directory, "Mon, 13-02.txt"));
-        Assert.Equal("Mon, 13-02.txt", workspace.RequireSingleFile().Name);
+        FileAssert.Exists(Path.Combine(directory, "text.txt"));
+        Assert.Equal("text.txt", workspace.RequireSingleFile().Name);
     }
 
     [Fact]
@@ -76,14 +76,14 @@ public sealed class BasketWorkspaceMaterialTests : IDisposable
         _harness.Clock.Now = TestMoments.TuesdayAfternoon;
         _harness.Clipboard.Payload = PastePayload.FromText("second");
         Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
-        var second = Assert.Single(workspace.Files(string.Empty), material => material.Name == "Tue, 14-30.txt");
+        var second = Assert.Single(workspace.Files(string.Empty), material => material.Name == "second.txt");
 
         var renamed = workspace.RenameEntry(second, "report");
 
         Assert.False(renamed);
         workspace.RequireError();
         FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "report.txt"), "first");
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Tue, 14-30.txt"), "second");
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "second.txt"), "second");
     }
 
     [Fact]
@@ -107,10 +107,10 @@ public sealed class BasketWorkspaceMaterialTests : IDisposable
         var directory = workspace.RequireActiveTab().DirectoryPath;
         var material = PasteText(workspace, "text");
 
-        Assert.True(workspace.RenameEntry(material, "Mon, 13-02"));
+        Assert.True(workspace.RenameEntry(material, "text"));
 
-        FileAssert.Exists(Path.Combine(directory, "Mon, 13-02.txt"));
-        Assert.Equal("Mon, 13-02.txt", workspace.RequireSingleFile().Name);
+        FileAssert.Exists(Path.Combine(directory, "text.txt"));
+        Assert.Equal("text.txt", workspace.RequireSingleFile().Name);
     }
 
     [Fact]
@@ -119,14 +119,14 @@ public sealed class BasketWorkspaceMaterialTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
         var material = PasteText(workspace, "text");
-        Assert.Equal("Mon, 13-02.txt", material.Name);
+        Assert.Equal("text.txt", material.Name);
 
-        var renamed = workspace.RenameEntry(material, "MON, 13-02");
+        var renamed = workspace.RenameEntry(material, "TEXT");
 
         Assert.True(renamed);
         var refreshed = workspace.RequireSingleFile();
-        Assert.Equal("MON, 13-02.txt", refreshed.Name);
-        Assert.Equal("MON, 13-02.txt", Path.GetFileName(Assert.Single(Directory.GetFiles(directory, "*.txt"))));
+        Assert.Equal("TEXT.txt", refreshed.Name);
+        Assert.Equal("TEXT.txt", Path.GetFileName(Assert.Single(Directory.GetFiles(directory, "*.txt"))));
         FileAssert.HasUtf8TextWithoutBom(refreshed.FullPath, "text");
         Assert.Empty(Directory.GetFiles(directory, "~*.tmp"));
         Assert.False(workspace.StatusIsError);
