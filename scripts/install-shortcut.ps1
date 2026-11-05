@@ -47,5 +47,25 @@ $shortcut.Description = 'PasteHatch - context baskets for local AI agents'
 $shortcut.WindowStyle = 1
 $shortcut.Save()
 
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class PasteHatchShortcutShell
+{
+    [DllImport("shell32.dll", EntryPoint = "SHChangeNotify")]
+    public static extern void Notify(int eventId, uint flags, IntPtr item1, IntPtr item2);
+}
+'@
+
+# The icon path stays stable across releases, so discard previously cached artwork.
+[PasteHatchShortcutShell]::Notify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+$shortcutItem = [Runtime.InteropServices.Marshal]::StringToHGlobalUni($shortcutPath)
+try {
+    [PasteHatchShortcutShell]::Notify(0x00002000, 0x0005, $shortcutItem, [IntPtr]::Zero)
+}
+finally {
+    [Runtime.InteropServices.Marshal]::FreeHGlobal($shortcutItem)
+}
+
 Write-Host "Shortcut created: $shortcutPath"
 Write-Host "Target: $exe"
