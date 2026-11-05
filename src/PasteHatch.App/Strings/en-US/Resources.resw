@@ -53,6 +53,9 @@
   <data name="Status_BasketLimit" xml:space="preserve"><value>The limit of 100 baskets has been reached.</value></data>
   <data name="Error_CreateBasket" xml:space="preserve"><value>Could not create a basket: {0}</value></data>
   <data name="Status_LastBasket" xml:space="preserve"><value>The last basket cannot be closed.</value></data>
+  <data name="Error_BasketFolderNoWords" xml:space="preserve"><value>The basket name must contain at least one letter or digit for its folder name.</value></data>
+  <data name="Error_BasketFolderExists" xml:space="preserve"><value>A folder named “{0}” already exists in the baskets folder. Choose another name.</value></data>
+  <data name="Error_RenameBasketFolder" xml:space="preserve"><value>Could not rename the basket folder: {0}</value></data>
   <data name="Error_RecycleBasket" xml:space="preserve"><value>Could not move the basket to the Windows Recycle Bin: {0}</value></data>
   <data name="Status_BasketRecycled" xml:space="preserve"><value>Basket “{0}” was moved to the Windows Recycle Bin.</value></data>
   <data name="Error_Navigate" xml:space="preserve"><value>Could not open the folder.</value></data>

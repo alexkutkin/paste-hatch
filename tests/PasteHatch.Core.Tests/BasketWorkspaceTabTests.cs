@@ -18,7 +18,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
 
         workspace.Refresh();
 
-        var adopted = Assert.Single(workspace.Tabs, tab => tab.Uid == "repo-grooming-skill");
+        var adopted = Assert.Single(workspace.Tabs, tab => tab.DirectoryPath == directory);
         Assert.Equal("repo-grooming-skill", adopted.DisplayName);
         Assert.Equal(directory, adopted.DirectoryPath);
         Assert.Equal(active, workspace.ActiveTab);
@@ -35,7 +35,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var active = workspace.RequireActiveTab();
         workspace.RenameTab(active.Uid, "Custom basket");
-        Directory.CreateDirectory(Path.Combine(active.DirectoryPath, "selected"));
+        Directory.CreateDirectory(Path.Combine(workspace.RequireActiveTab().DirectoryPath, "selected"));
         var navigation = _harness.TreeStateFor(workspace);
         navigation.Reconcile(null, []);
         navigation.Select(Assert.Single(workspace.GetEntries(string.Empty)));
@@ -162,7 +162,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Assert.True(renamed);
         Assert.Equal("Reports", workspace.RequireActiveTab().DisplayName);
         Assert.Equal(tab.Uid, workspace.RequireActiveTab().Uid);
-        Assert.True(Directory.Exists(tab.DirectoryPath));
+        Assert.True(Directory.Exists(Path.Combine(_harness.Temp.BasketsRoot, "Reports")));
 
         var saved = _harness.ReadSavedState();
         var savedTab = Assert.Single(saved.Tabs);
@@ -380,9 +380,9 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         workspace.Initialize();
 
         Assert.Equal(2, workspace.Tabs.Count);
-        var namesByUid = workspace.Tabs.ToDictionary(tab => tab.Uid, tab => tab.DisplayName);
-        Assert.Equal("Mon, 13:02", namesByUid["AB2CD3"]);
-        Assert.Equal("Tue, 14:30", namesByUid["GHJKLM"]);
+        var namesByFolder = workspace.Tabs.ToDictionary(tab => Path.GetFileName(tab.DirectoryPath), tab => tab.DisplayName);
+        Assert.Equal("Mon, 13:02", namesByFolder["AB2CD3"]);
+        Assert.Equal("Tue, 14:30", namesByFolder["GHJKLM"]);
 
         var saved = _harness.ReadSavedState();
         Assert.Equal(2, saved.Tabs.Count);
@@ -402,7 +402,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         workspace.Initialize();
 
         Assert.Equal(invalidNames.Length, workspace.Tabs.Count);
-        Assert.All(workspace.Tabs, tab => Assert.Equal(tab.Uid, tab.DisplayName));
+        Assert.All(workspace.Tabs, tab => Assert.Equal(Path.GetFileName(tab.DirectoryPath), tab.DisplayName));
         Assert.Equal(invalidNames.Length, Directory.GetDirectories(_harness.Temp.BasketsRoot).Length);
         foreach (var invalidName in invalidNames)
         {

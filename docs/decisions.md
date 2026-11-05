@@ -6,8 +6,12 @@ Current behavior and structure belong in the README and architecture overview.
 - **Use native Fluent controls and the system theme.** A custom visual language is outside
   the product scope.
 - **Keep files on disk as the source of truth.** Losing application state must not lose
-  materials. Basket renaming must preserve paths already handed to an agent; folders
-  copied into the baskets root must remain accessible without moving or renaming them.
+  materials. Folders copied into the baskets root must remain accessible without moving or
+  renaming them.
+- **Give each basket a stable identity separate from its folder name.** An explicit rename
+  renames the basket folder (words joined with underscores) and keeps the identity, so
+  baskets survive restarts and adoption. Paths handed out before an explicit rename may stop
+  working; no aliases or links keep them alive. Existing folders are never renamed implicitly.
 - **Keep baskets in a left rail, with at most 100 open.** There must always be a usable
   basket, so the last one cannot close.
 - **Confirm recycling with Cancel as the default.** Recoverability through the Windows

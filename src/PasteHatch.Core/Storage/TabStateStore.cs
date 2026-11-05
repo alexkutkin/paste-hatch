@@ -38,6 +38,16 @@ public sealed class TabStateStore : ITabStateStore
             var json = File.ReadAllText(StateFilePath, Encoding.UTF8);
             var state = JsonSerializer.Deserialize<WorkspaceState>(json, JsonOptions) ?? new WorkspaceState();
             state.Tabs ??= [];
+            foreach (var tab in state.Tabs)
+            {
+                // Before version 4 the UID was also the basket folder name.
+                if (string.IsNullOrWhiteSpace(tab.Folder))
+                {
+                    tab.Folder = tab.Uid;
+                }
+            }
+
+            state.Version = WorkspaceState.CurrentVersion;
             return state;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)

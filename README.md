@@ -26,8 +26,10 @@ an ordinary folder on your computer. Copy its path and give it to your agent.
 ## Use
 
 Click the tray icon to open PasteHatch. Pick a basket, then paste with `Ctrl+V` or drop
-files into the window. A screenshot becomes a PNG, text becomes a text file, and a web
-link becomes a `.url` file. Pasted files and folders keep their contents.
+files into the window. A screenshot becomes a PNG, text becomes a text file named after
+its first five words (text starting with `Weekly report for the team` is saved as
+`Weekly_report_for_the_team.txt`),
+and a web link becomes a `.url` file. Pasted files and folders keep their contents.
 
 Select a file to preview it. Text and Markdown appear as source; images appear in the
 preview panel at their actual size. The buttons on a tree row open the item, copy a
@@ -117,7 +119,10 @@ Data lives in `%LOCALAPPDATA%\PasteHatch`:
 | `state.json` | Basket names, order, current folders and window layout |
 | `settings.json` | Language and window settings |
 
-Renaming a basket in the app does not change its folder path. Deleting an item or
+Renaming a basket also renames its folder: the words of the new name are joined with
+underscores, so `My Basket` lives in `Baskets\My_Basket`. Paths copied before the rename
+stop pointing at the basket. If another folder already has that name, the rename is refused.
+Deleting an item or
 closing a basket asks for confirmation and sends it to the Windows Recycle Bin.
 The last basket cannot be closed.
 

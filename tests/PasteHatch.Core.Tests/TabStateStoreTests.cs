@@ -131,7 +131,7 @@ public sealed class TabStateStoreTests : IDisposable
 
         Assert.DoesNotContain("materialOrder", json, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("selectedFolder", json);
-        Assert.Equal(3, store.Load().Version);
+        Assert.Equal(WorkspaceState.CurrentVersion, store.Load().Version);
     }
 
     [Fact]

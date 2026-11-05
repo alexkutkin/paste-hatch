@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PasteHatch.Core;
 
@@ -37,6 +38,22 @@ public static class MaterialNaming
         }
 
         return candidate;
+    }
+
+    /// <summary>Maximum number of leading words used to name a pasted text document.</summary>
+    public const int PastedTextNameWords = 5;
+
+    /// <summary>
+    /// Collision-free ".txt" name for pasted text: its first <see cref="PastedTextNameWords"/>
+    /// words joined with underscores, or <paramref name="fallbackBaseName"/> when the text has
+    /// no usable word.
+    /// </summary>
+    public static string PastedTextFileName(string directory, string text, string fallbackBaseName, ITextProvider textProvider)
+    {
+        var baseName = NameFromWords(text, PastedTextNameWords);
+        return baseName is null
+            ? DefaultFileName(directory, fallbackBaseName, ".txt", textProvider)
+            : UniqueFileName(directory, baseName + ".txt", textProvider);
     }
 
     public static string DefaultFileName(string directory, string format, string extension, ITextProvider text)
@@ -142,6 +159,42 @@ public static class MaterialNaming
 
         return trimmed;
     }
+
+    /// <summary>
+    /// Builds a Windows-safe base name from the words of <paramref name="text"/> joined with
+    /// underscores. Punctuation and characters that are invalid in file names are dropped,
+    /// letters of every script are kept as typed, the result is bounded to
+    /// <see cref="MaxBaseNameLength"/> and reserved device names get a trailing underscore.
+    /// Returns <c>null</c> when the text contains no usable word.
+    /// </summary>
+    public static string? NameFromWords(string? text, int maxWords = int.MaxValue)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var words = WordPattern.Matches(text).Select(match => match.Value).Take(maxWords).ToList();
+        if (words.Count == 0)
+        {
+            return null;
+        }
+
+        var name = string.Join('_', words);
+        if (name.Length > MaxBaseNameLength)
+        {
+            var length = char.IsHighSurrogate(name[MaxBaseNameLength - 1])
+                ? MaxBaseNameLength - 1
+                : MaxBaseNameLength;
+            name = name[..length].TrimEnd('_', '-', '\'', '\u2019');
+        }
+
+        return IsReservedDeviceName(name) ? name + "_" : name;
+    }
+
+    private static readonly Regex WordPattern = new(
+        @"[\p{L}\p{M}\p{N}]+(?:['\u2019\-][\p{L}\p{M}\p{N}]+)*",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static bool IsReservedDeviceName(string name)
     {
