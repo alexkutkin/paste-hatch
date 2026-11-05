@@ -216,12 +216,15 @@ try {
     $clipboardSaved = $true
     foreach ($entry in @(@{name='inside.txt'; path=(Join-Path $basket 'folder2\inside.txt')}, @{name='folder2'; path=(Join-Path $basket 'folder2')})) {
         "ACTION invoke row copy path: $($entry.name)" | Add-Content (Join-Path $run 'actions.txt')
-        $rowCopy = (Find-Node $entry.name).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryCopyPathButton'))
-        if (!$rowCopy) { throw "Missing copy path button for $($entry.name)" }
-        $rowOpen = (Find-Node $entry.name).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryOpenButton'))
-        if (!$rowOpen -or !$rowOpen.Current.IsEnabled) { throw "Missing enabled open button for $($entry.name)" }
+        Wait-For "row actions are ready for $($entry.name)" {
+            $node = Find-Node $entry.name
+            if (!$node) { return $false }
+            $script:rowCopy = $node.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryCopyPathButton'))
+            $script:rowOpen = $node.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryOpenButton'))
+            $null -ne $rowCopy -and $null -ne $rowOpen -and $rowOpen.Current.IsEnabled
+        }
         Wait-For "row actions have right padding for $($entry.name)" {
             (Find-Node $entry.name).Current.BoundingRectangle.Right - $rowCopy.Current.BoundingRectangle.Right -ge 8
         }
