@@ -1,5 +1,7 @@
 using System;
 using System.Threading;
+using System.Security.Cryptography;
+using System.Text;
 using PasteHatch.Core;
 
 namespace PasteHatch.Platform;
@@ -47,7 +49,15 @@ public sealed class SingleInstanceHost : IDisposable
     {
         ArgumentNullException.ThrowIfNull(onShowRequest);
 
-        var guard = SingleInstanceGuard.TryAcquire();
+        // Offscreen verification owns a disposable root and must never activate the owner's instance.
+        var testRoot = Environment.GetEnvironmentVariable(PasteHatchPaths.DataRootEnvironmentVariable);
+        var isolated = Environment.GetEnvironmentVariable("PASTEHATCH_TEST_OFFSCREEN") == "1"
+            && !string.IsNullOrWhiteSpace(testRoot);
+        var scope = isolated
+            ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                System.IO.Path.GetFullPath(testRoot!).ToUpperInvariant())))
+            : null;
+        var guard = SingleInstanceGuard.TryAcquire(scope);
         if (!guard.IsPrimary)
         {
             guard.SignalPrimaryInstance();

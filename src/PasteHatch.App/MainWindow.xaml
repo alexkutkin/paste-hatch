@@ -129,6 +129,7 @@
                     DragItemsCompleted="OnBasketDragItemsCompleted"
                     DragItemsStarting="OnBasketDragItemsStarting"
                     IsItemClickEnabled="False"
+                    KeyDown="OnBasketsKeyDown"
                     ReorderMode="Enabled"
                     RightTapped="OnBasketRightTapped"
                     SelectionChanged="OnBasketSelectionChanged"
@@ -179,6 +180,21 @@
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
+                    <ListView.Footer>
+                        <Button
+                            x:Name="AddBasketFooterButton"
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            AutomationProperties.Name="{Binding [Action_CreateBasket], Source={StaticResource Loc}}"
+                            Click="OnAddBasketClick"
+                            ToolTipService.ToolTip="{Binding [ToolTip_CreateBasket], Source={StaticResource Loc}}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="14" Glyph="&#xE710;" />
+                                <TextBlock Text="{Binding [Action_CreateBasket], Source={StaticResource Loc}}" />
+                            </StackPanel>
+                        </Button>
+                    </ListView.Footer>
                 </ListView>
             </Grid>
 
@@ -278,6 +294,9 @@
                                             VerticalAlignment="Center"
                                             Visibility="{Binding Content.NameVisibility}">
                                             <TextBlock
+                                                x:Name="EntryNameText"
+                                                HorizontalAlignment="Left"
+                                                DoubleTapped="OnEntryNameDoubleTapped"
                                                 Text="{Binding Content.Name}"
                                                 TextTrimming="CharacterEllipsis" />
                                             <TextBlock
@@ -287,6 +306,7 @@
                                                 TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
                                         <StackPanel
+                                            DoubleTapped="OnEntryActionDoubleTapped"
                                             Orientation="Horizontal"
                                             Spacing="4"
                                             VerticalAlignment="Center"
@@ -331,12 +351,6 @@
                                             LostFocus="OnEntryActionLostFocus">
                                             <FontIcon FontSize="14" Glyph="&#xE8A7;" />
                                         </Button>
-                                        <Rectangle
-                                            Width="1"
-                                            Height="20"
-                                            Margin="6,0"
-                                            VerticalAlignment="Center"
-                                            Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                         <Button
                                             x:Name="EntryCopyContentButton"
                                             Width="32" Height="32" Padding="0"
@@ -352,6 +366,7 @@
                                         <Button
                                             x:Name="EntryCopyPathButton"
                                             Width="32" Height="32" Padding="0"
+                                            Margin="12,0,0,0"
                                             AutomationProperties.Name="{Binding [Command_CopyPath], Source={StaticResource Loc}}"
                                             ToolTipService.ToolTip="{Binding [ToolTip_CopyEntryPath], Source={StaticResource Loc}}"
                                             Click="OnCopyEntryPathClick"

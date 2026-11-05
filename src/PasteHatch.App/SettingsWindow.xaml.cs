@@ -32,6 +32,7 @@ public sealed partial class SettingsWindow : Window
         StartInTrayToggle.IsOn = _settings.StartInTray;
         RememberPlacementToggle.IsOn = _settings.RememberWindowPlacement;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
+        ConfirmBasketDeletionToggle.IsOn = _settings.ConfirmBasketDeletion;
         LanguageCombo.SelectedIndex =
             Localization.Normalize(_settings.Language) == Localization.Russian ? 1 : 0;
         _isInitializing = false;
@@ -152,6 +153,17 @@ public sealed partial class SettingsWindow : Window
         SaveAndApply();
     }
 
+    private void OnConfirmBasketDeletionToggled(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing)
+        {
+            return;
+        }
+
+        _settings.ConfirmBasketDeletion = ConfirmBasketDeletionToggle.IsOn;
+        SaveAndApply();
+    }
+
     private void SaveAndApply()
     {
         try
@@ -173,12 +185,14 @@ public sealed partial class SettingsWindow : Window
         _settings.StartInTray = defaults.StartInTray;
         _settings.RememberWindowPlacement = defaults.RememberWindowPlacement;
         _settings.AlwaysOnTop = defaults.AlwaysOnTop;
+        _settings.ConfirmBasketDeletion = defaults.ConfirmBasketDeletion;
         _settings.Language = defaults.Language;
 
         _isInitializing = true;
         StartInTrayToggle.IsOn = _settings.StartInTray;
         RememberPlacementToggle.IsOn = _settings.RememberWindowPlacement;
         AlwaysOnTopToggle.IsOn = _settings.AlwaysOnTop;
+        ConfirmBasketDeletionToggle.IsOn = _settings.ConfirmBasketDeletion;
         LanguageCombo.SelectedIndex = 0;
         _isInitializing = false;
 

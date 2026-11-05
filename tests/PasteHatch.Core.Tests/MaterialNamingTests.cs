@@ -98,6 +98,38 @@ public sealed class MaterialNamingTests : IDisposable
         Assert.Equal("a-b-c-d.url", fileName);
     }
 
+    [Fact]
+    public void PastedTextFileName_LongReservedName_StillFitsSharedBaseNameLimit()
+    {
+        var fileName = MaterialNaming.PastedTextFileName(_temp.Root, "CON." + new string('x', 300), Text);
+
+        Assert.Equal("_CON." + new string('x', 155) + ".txt", fileName);
+        Assert.NotNull(MaterialNaming.ValidateRenameBase(Path.GetFileNameWithoutExtension(fileName), ".txt", Text, out _));
+    }
+
+    [Theory]
+    [InlineData("COM¹")]
+    [InlineData("COM²")]
+    [InlineData("COM³")]
+    [InlineData("LPT¹")]
+    [InlineData("LPT²")]
+    [InlineData("LPT³")]
+    public void PastedTextFileName_SuperscriptDeviceName_IsMadeSafe(string name)
+    {
+        Assert.Null(MaterialNaming.ValidateRenameBase(name, ".txt", Text, out _));
+        Assert.Equal($"_{name}.txt", MaterialNaming.PastedTextFileName(_temp.Root, name, Text));
+    }
+
+    [Fact]
+    public void PastedTextFileName_ReservedPrefixTruncation_DoesNotSplitUnicodeCharacter()
+    {
+        var content = "CON." + new string('x', 154) + "😀";
+
+        var fileName = MaterialNaming.PastedTextFileName(_temp.Root, content, Text);
+
+        Assert.Equal("_CON." + new string('x', 154) + ".txt", fileName);
+    }
+
     [Theory]
     [InlineData("https://example.com")]
     [InlineData("https://example.com/page?query=1#fragment")]

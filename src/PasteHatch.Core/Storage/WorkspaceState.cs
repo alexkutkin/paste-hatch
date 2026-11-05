@@ -4,10 +4,10 @@ namespace PasteHatch.Core;
 public sealed class WorkspaceState
 {
     /// <summary>
-    /// Version 3 replaced the flat <c>materialOrder</c> list with a per-tab selected folder.
-    /// Version 2 files still load: the order is ignored, the files themselves are untouched.
+    /// Version 4 separates stable basket identity from its mutable directory component.
+    /// Older directory associations are upgraded by the state reader without moving files.
     /// </summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     public int Version { get; set; } = CurrentVersion;
 
@@ -15,6 +15,12 @@ public sealed class WorkspaceState
     public string? ActiveUid { get; set; }
 
     public List<TabState> Tabs { get; set; } = [];
+
+    /// <summary>Literal filesystem-path copy events, newest first; duplicate paths are retained.</summary>
+    public List<string> RecentCopiedPaths { get; set; } = [];
+
+    /// <summary>Durable intent used to recover a basket rename interrupted between disk and state writes.</summary>
+    public BasketRenameState? PendingRename { get; set; }
 
     public WindowPlacementState? Window { get; set; }
 
@@ -24,11 +30,14 @@ public sealed class WorkspaceState
 
 public sealed class TabState
 {
-    /// <summary>Folder name of the basket inside the baskets root.</summary>
+    /// <summary>Stable internal basket identity, independent of its directory name.</summary>
     public string Uid { get; set; } = string.Empty;
 
-    /// <summary>User-visible tab name; the basket folder name remains the on-disk identity.</summary>
+    /// <summary>User-visible basket name.</summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>One directory component under the baskets root.</summary>
+    public string DirectoryName { get; set; } = string.Empty;
 
     /// <summary>
     /// Folder currently open in this basket, relative to the basket root. An empty string is the
@@ -36,13 +45,6 @@ public sealed class TabState
     /// back to the root instead of hiding the basket.
     /// </summary>
     public string SelectedFolder { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Legacy version-2 field. Kept only so old state files deserialize without errors; the
-    /// manual material order is no longer used and is never written.
-    /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public List<string>? MaterialOrder { get; set; }
 }
 
 /// <summary>Last floating-window rectangle in physical pixels, restored on the next launch.</summary>
@@ -55,4 +57,12 @@ public sealed class WindowPlacementState
     public int Width { get; set; }
 
     public int Height { get; set; }
+}
+
+public sealed class BasketRenameState
+{
+    public string Uid { get; set; } = string.Empty;
+    public string DirectoryName { get; set; } = string.Empty;
+    public string TemporaryDirectoryName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
 }

@@ -15,6 +15,9 @@ public sealed class AppSettings
     /// <summary>Keep the window above all other windows.</summary>
     public bool AlwaysOnTop { get; set; }
 
+    /// <summary>Ask before moving a basket and its contents to the Recycle Bin.</summary>
+    public bool ConfirmBasketDeletion { get; set; } = true;
+
     /// <summary>UI language: "en" (default) or "ru".</summary>
     public string Language { get; set; } = "en";
 
@@ -23,6 +26,7 @@ public sealed class AppSettings
         StartInTray = StartInTray,
         RememberWindowPlacement = RememberWindowPlacement,
         AlwaysOnTop = AlwaysOnTop,
+        ConfirmBasketDeletion = ConfirmBasketDeletion,
         Language = Language,
     };
 }

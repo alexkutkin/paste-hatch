@@ -98,7 +98,8 @@ public sealed partial class MainWindow : Window
             _confirmations,
             formatter: new TabNameFormatter(() => Localization.Culture),
             text: Localization.Text,
-            currentFolderOf: CurrentFolderFor);
+            currentFolderOf: CurrentFolderFor,
+            confirmBasketDeletion: () => _settings.ConfirmBasketDeletion);
         _treeNavigation = new BasketTreeNavigation(_workspace);
         _liveRefresh = new WorkspaceRefreshCoordinator(_workspace, new FolderWatcher(), new FolderWatcher(),
             action => DispatcherQueue.TryEnqueue(() => action()), refresh => RefreshAll(refresh.RebuildTree), Localization.Text);
@@ -127,7 +128,9 @@ public sealed partial class MainWindow : Window
 
         _tray = _testNoTray
             ? null
-            : new TrayIcon(ToggleWindowVisibility, ShowFromTray, OpenSettings, ExitApplication);
+            : new TrayIcon(ToggleWindowVisibility, ShowFromTray, OpenSettings, ExitApplication,
+                () => _workspace.RecentCopiedPaths, path => _workspace.CopyFilesystemPath(path),
+                path => TrayPathLabel.Format(path, _workspace.BasketsRoot, _workspace.Tabs));
 
         Localization.LanguageChanged += OnLanguageChanged;
     }
@@ -453,13 +456,30 @@ public sealed partial class MainWindow : Window
     {
         if (_settingsWindow is not null)
         {
-            _settingsWindow.Activate();
+            ShowSettingsWindow();
             return;
         }
 
         _settingsWindow = new SettingsWindow(_settingsStore, _settings.Clone(), ApplySettings);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-        _settingsWindow.Activate();
+        ShowSettingsWindow();
+    }
+
+    private void ShowSettingsWindow()
+    {
+        if (_settingsWindow is null)
+        {
+            return;
+        }
+
+        if (_testOffscreen)
+        {
+            NativeWindow.ShowWithoutActivation(NativeWindow.GetHandle(_settingsWindow));
+        }
+        else
+        {
+            _settingsWindow.Activate();
+        }
     }
 
     private void ApplySettings(AppSettings settings)
@@ -481,6 +501,7 @@ public sealed partial class MainWindow : Window
         _isUpdatingUi = true;
         try
         {
+            _tray?.RefreshHistory();
             if (_editingBasketUid is null)
             {
                 RefreshBaskets();
@@ -508,10 +529,7 @@ public sealed partial class MainWindow : Window
         NewFolderButton.IsEnabled = hasTab;
         OpenFolderButton.IsEnabled = hasTab;
         CopyPathButton.IsEnabled = hasTab;
-        AddBasketButton.IsEnabled = _workspace.CanCreateTab;
-        ToolTipService.SetToolTip(
-            AddBasketButton,
-            Localization.Text.Get(_workspace.CanCreateTab ? "ToolTip_CreateBasket" : "Status_BasketLimit"));
+        UpdateAddButtonState();
     }
 
     private void RefreshStatus()
@@ -601,7 +619,16 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void UpdateAddButtonState() => AddBasketButton.IsEnabled = _workspace.CanCreateTab;
+    private void UpdateAddButtonState()
+    {
+        var canCreate = _workspace.CanCreateTab;
+        var tooltip = Localization.Text.Get(canCreate ? "ToolTip_CreateBasket" : "Status_BasketLimit");
+        foreach (var button in new[] { AddBasketButton, AddBasketFooterButton })
+        {
+            button.IsEnabled = canCreate;
+            ToolTipService.SetToolTip(button, tooltip);
+        }
+    }
 
     private void OnAddBasketClick(object sender, RoutedEventArgs e) => _workspace.CreateTab();
 
@@ -710,6 +737,23 @@ public sealed partial class MainWindow : Window
         {
             _workspace.CloseTab(row.Uid);
         }
+    }
+
+    private void OnBasketsKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Delete || IsTextInputFocused() || e.OriginalSource is TextBox)
+        {
+            return;
+        }
+
+        var row = FindBasketRowFromSource(e.OriginalSource as DependencyObject);
+        if (row is null)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _workspace.CloseTab(row.Uid);
     }
 
     private void OnBasketRightTapped(object sender, RightTappedRoutedEventArgs e)
@@ -1058,6 +1102,17 @@ public sealed partial class MainWindow : Window
         SelectTreePath(FileTree.RootNodes[0], _treeNavigation.ParentFolder, select: true);
     }
 
+    private void OnEntryNameDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TreeViewNode { Content: EntryNode entry } node } &&
+            !entry.IsFolder)
+        {
+            e.Handled = true;
+            FileTree.SelectedNode = node;
+            BeginNodeRename(entry);
+        }
+    }
+
     private void OnTreeEntryDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         if (e.OriginalSource is TextBox)
@@ -1073,6 +1128,11 @@ public sealed partial class MainWindow : Window
         }
 
         e.Handled = true;
+        if (entry.IsEditing)
+        {
+            return;
+        }
+
         if (entry.IsFolder)
         {
             node.IsExpanded = !node.IsExpanded;

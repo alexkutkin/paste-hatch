@@ -231,4 +231,7 @@
   <data name="Settings_Version" xml:space="preserve"><value>Version {0}</value></data>
   <data name="Action_ResetSettings" xml:space="preserve"><value>Reset settings</value></data>
   <data name="Action_Done" xml:space="preserve"><value>Done</value></data>
+  <data name="Settings_ConfirmBasketDeletion" xml:space="preserve"><value>Confirm basket deletion</value></data>
+  <data name="Settings_ConfirmBasketDeletionDesc" xml:space="preserve"><value>Ask before moving a basket and its contents to the Recycle Bin.</value></data>
+  <data name="Tray_RecentCopiedPaths" xml:space="preserve"><value>Recently copied paths</value></data>
 </root>

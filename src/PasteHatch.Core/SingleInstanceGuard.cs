@@ -26,10 +26,11 @@ public sealed class SingleInstanceGuard : IDisposable
     /// <summary>True for the first process; false for a second launch that must step aside.</summary>
     public bool IsPrimary { get; }
 
-    public static SingleInstanceGuard TryAcquire()
+    public static SingleInstanceGuard TryAcquire(string? instanceScope = null)
     {
-        var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
-        var showWindowEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowWindowEventName);
+        var suffix = string.IsNullOrEmpty(instanceScope) ? string.Empty : "." + instanceScope;
+        var mutex = new Mutex(initiallyOwned: true, MutexName + suffix, out var createdNew);
+        var showWindowEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowWindowEventName + suffix);
         return new SingleInstanceGuard(mutex, showWindowEvent, createdNew);
     }
 

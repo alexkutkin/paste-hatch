@@ -6,7 +6,7 @@ namespace PasteHatch.Core;
 /// The application logic for baskets, folders, materials and tab state. It owns the invariants
 /// that the UI and the requirements depend on: at most 100 open baskets, always an active basket,
 /// files on disk as the source of truth, and everything that leaves the app going through the
-/// Windows Recycle Bin only after a confirmation.
+/// Windows Recycle Bin according to the deletion confirmation policy.
 /// </summary>
 public sealed class BasketWorkspace
 {
@@ -31,12 +31,14 @@ public sealed class BasketWorkspace
     private readonly IClipboardReader _clipboard;
     private readonly IShellService _shell;
     private readonly IConfirmationService _confirmations;
+    private readonly Func<bool> _confirmBasketDeletion;
     private readonly IClock _clock;
     private readonly TabNameFormatter _formatter;
     private readonly ITextProvider _text;
     private readonly FileTransfer _transfers;
 
     private readonly List<BasketTab> _tabs = [];
+    private readonly List<string> _recentCopiedPaths = [];
     private readonly Dictionary<string, string> _savedFolders = new(StringComparer.Ordinal);
     private readonly Func<BasketTab, string> _currentFolderOf;
     private string? _activeUid;
@@ -50,7 +52,8 @@ public sealed class BasketWorkspace
         IClock? clock = null,
         TabNameFormatter? formatter = null,
         ITextProvider? text = null,
-        Func<BasketTab, string>? currentFolderOf = null)
+        Func<BasketTab, string>? currentFolderOf = null,
+        Func<bool>? confirmBasketDeletion = null)
     {
         _basketsRoot = basketsRoot;
         _stateStore = stateStore;
@@ -59,6 +62,7 @@ public sealed class BasketWorkspace
         _text = text ?? KeyTextProvider.Instance;
         _transfers = new FileTransfer(shell, _text);
         _confirmations = confirmations;
+        _confirmBasketDeletion = confirmBasketDeletion ?? (() => true);
         _clock = clock ?? SystemClock.Instance;
         _formatter = formatter ?? new TabNameFormatter();
         _currentFolderOf = currentFolderOf ?? (_ => string.Empty);
@@ -67,6 +71,9 @@ public sealed class BasketWorkspace
     public event EventHandler<WorkspaceChange>? Changed;
 
     public IReadOnlyList<BasketTab> Tabs => _tabs;
+
+    /// <summary>The five latest successful filesystem-path copy events, newest first.</summary>
+    public IReadOnlyList<string> RecentCopiedPaths => _recentCopiedPaths.AsReadOnly();
 
     public string BasketsRoot => _basketsRoot;
 
@@ -184,6 +191,8 @@ public sealed class BasketWorkspace
         Directory.CreateDirectory(_basketsRoot);
 
         var state = _stateStore.Load();
+        _recentCopiedPaths.Clear();
+        _recentCopiedPaths.AddRange((state.RecentCopiedPaths ?? []).Take(5));
         Geometry.Restore(state.Window, state.PreviewWidth);
 
         _tabs.Clear();
@@ -242,37 +251,73 @@ public sealed class BasketWorkspace
         return true;
     }
 
-    /// <summary>Renames a tab; the basket folder keeps its UID, only the display name changes.</summary>
+    /// <summary>Renames the physical basket folder while retaining its stable identity.</summary>
     public bool RenameTab(string uid, string? newName)
     {
         var index = _tabs.FindIndex(tab => tab.Uid == uid);
-        if (index < 0)
+        if (index < 0) return false;
+        var name = NormalizeDisplayName(newName);
+        if (name is null) return false;
+        var directoryName = Regex.Replace(name, @"\s+", "_");
+        var validated = MaterialNaming.ValidateFolderName(directoryName, _text, out var error);
+        if (validated is null)
         {
+            Fail(error!);
             return false;
         }
-
-        var trimmed = (newName ?? string.Empty).Trim();
-        if (trimmed.Length == 0)
+        var tab = _tabs[index];
+        var target = Path.Combine(_basketsRoot, validated);
+        var samePath = string.Equals(tab.DirectoryPath, target, StringComparison.Ordinal);
+        var caseOnly = string.Equals(tab.DirectoryPath, target, StringComparison.OrdinalIgnoreCase);
+        if (!caseOnly && (Directory.Exists(target) || File.Exists(target)))
         {
+            Fail(_text.Format("Error_FolderExists", validated));
             return false;
         }
-
-        if (trimmed.Length > MaxTabNameLength)
+        var intent = new BasketRenameState
         {
-            trimmed = trimmed[..MaxTabNameLength].TrimEnd();
-        }
-
-        if (string.Equals(_tabs[index].DisplayName, trimmed, StringComparison.Ordinal))
+            Uid = uid, DirectoryName = validated, Name = name,
+            TemporaryDirectoryName = $"~{Guid.NewGuid():N}.tmp",
+        };
+        try
         {
-            return true;
+            // Persist the intent before touching disk. A failed write leaves the old basket intact.
+            _stateStore.Save(CreateState(intent));
+            if (!samePath)
+            {
+                if (caseOnly)
+                {
+                    var temporary = Path.Combine(_basketsRoot, intent.TemporaryDirectoryName);
+                    Directory.Move(tab.DirectoryPath, temporary);
+                    try { Directory.Move(temporary, target); }
+                    catch { Directory.Move(temporary, tab.DirectoryPath); throw; }
+                }
+                else Directory.Move(tab.DirectoryPath, target);
+            }
+            _tabs[index] = tab with { DisplayName = name, DirectoryPath = target };
+            _stateStore.Save(CreateState());
         }
-
-        _tabs[index] = _tabs[index] with { DisplayName = trimmed };
-        Commit(WorkspaceChangeKind.View);
+        catch (Exception ex)
+        {
+            var temporary = Path.Combine(_basketsRoot, intent.TemporaryDirectoryName);
+            if (caseOnly && !samePath && Directory.Exists(temporary))
+            {
+                // A denied target move and rollback can leave the basket under its temporary
+                // name. Keep that directory associated with its UID before refresh or saving.
+                _tabs[index] = tab with { DirectoryPath = temporary };
+                // If this write fails, the durable intent still identifies the temporary folder.
+                SaveStateQuietly();
+            }
+            Fail(_text.Format("Error_RenameFolder", ex.Message));
+            Publish(WorkspaceChangeKind.Contents);
+            return false;
+        }
+        SetStatus(_text.Format("Status_FolderRenamed", tab.DisplayName, name));
+        Publish(WorkspaceChangeKind.Contents);
         return true;
     }
 
-    /// <summary>Confirms, recycles the basket folder, then removes the tab.</summary>
+    /// <summary>Optionally confirms, recycles the basket folder, then removes the tab.</summary>
     public bool CloseTab(string uid)
     {
         if (_tabs.Count <= 1)
@@ -289,7 +334,7 @@ public sealed class BasketWorkspace
         }
 
         var tab = _tabs[index];
-        if (!_confirmations.ConfirmRecycleBasket(tab.DisplayName, tab.DirectoryPath))
+        if (_confirmBasketDeletion() && !_confirmations.ConfirmRecycleBasket(tab.DisplayName, tab.DirectoryPath))
         {
             return false;
         }
@@ -529,7 +574,7 @@ public sealed class BasketWorkspace
     /// Renames a file or a folder without touching its contents. Kind rules stay inside: a material
     /// keeps its extension, a folder gets a folder name, a collision is refused, and a case-only
     /// rename goes through a temporary name. Renaming a nested folder changes the paths of its
-    /// contents; renaming a basket is <see cref="RenameTab"/> and keeps its folder.
+    /// contents; renaming a basket is <see cref="RenameTab"/> and also renames its root folder.
     /// </summary>
     public bool RenameEntry(BasketEntry entry, string? newBaseName)
     {
@@ -736,25 +781,22 @@ public sealed class BasketWorkspace
             return;
         }
 
-        try
-        {
-            _shell.CopyText(directory);
-            SetStatus(_text.Get("Status_FolderPathCopied"));
-            Publish();
-        }
-        catch (Exception ex)
-        {
-            Fail(_text.Format("Error_CopyPath", ex.Message));
-        }
+        CopyFilesystemPath(directory, isFolder: true);
     }
 
     /// <summary>Copies the full path of a file or folder.</summary>
-    public void CopyEntryPath(BasketEntry entry)
+    public void CopyEntryPath(BasketEntry entry) => CopyFilesystemPath(entry.FullPath, entry.IsFolder);
+
+    /// <summary>Copies a literal recorded path, including a path whose target no longer exists.</summary>
+    public void CopyFilesystemPath(string path, bool isFolder = false)
     {
         try
         {
-            _shell.CopyText(entry.FullPath);
-            SetStatus(_text.Get(entry.IsFolder ? "Status_FolderPathCopied" : "Status_FilePathCopied"));
+            _shell.CopyText(path);
+            _recentCopiedPaths.Insert(0, path);
+            if (_recentCopiedPaths.Count > 5) _recentCopiedPaths.RemoveAt(5);
+            SetStatus(_text.Get(isFolder ? "Status_FolderPathCopied" : "Status_FilePathCopied"));
+            SaveStateQuietly();
             Publish();
         }
         catch (Exception ex)
@@ -848,13 +890,41 @@ public sealed class BasketWorkspace
                 break;
             }
 
-            var directoryPath = Path.Combine(_basketsRoot, saved.Uid);
+            if (!IsDirectoryComponent(saved.DirectoryName)) continue;
+            var directoryPath = Path.Combine(_basketsRoot, saved.DirectoryName);
+            var pending = state.PendingRename;
+            if (pending?.Uid == saved.Uid && IsDirectoryComponent(pending.DirectoryName) &&
+                IsDirectoryComponent(pending.TemporaryDirectoryName))
+            {
+                var target = Path.Combine(_basketsRoot, pending.DirectoryName);
+                var temporary = Path.Combine(_basketsRoot, pending.TemporaryDirectoryName);
+                // The temporary path is used only for case-only renames; never merge or overwrite.
+                if (!Directory.Exists(directoryPath) && Directory.Exists(temporary))
+                {
+                    try { Directory.Move(temporary, Directory.Exists(target) ? directoryPath : target); }
+                    catch (Exception ex)
+                    {
+                        // Keep the same basket reachable even if the recovery move is denied.
+                        directoryPath = temporary;
+                        SetError(_text.Format("Error_RenameFolder", ex.Message));
+                    }
+                }
+                var targetHasExactName = Directory.EnumerateDirectories(_basketsRoot)
+                    .Any(path => string.Equals(Path.GetFileName(path), pending.DirectoryName, StringComparison.Ordinal));
+                if (targetHasExactName &&
+                    (!Directory.Exists(directoryPath) || string.Equals(directoryPath, target, StringComparison.OrdinalIgnoreCase)))
+                {
+                    directoryPath = target;
+                    saved.Name = pending.Name;
+                }
+            }
             if (!Directory.Exists(directoryPath))
             {
                 continue;
             }
 
             var name = NormalizeDisplayName(saved.Name) ?? DefaultNameFor(directoryPath);
+            if (_tabs.Any(tab => string.Equals(tab.DirectoryPath, directoryPath, StringComparison.OrdinalIgnoreCase))) continue;
             _tabs.Add(new BasketTab(saved.Uid, name, directoryPath));
             _savedFolders[saved.Uid] = NormalizeRelativePath(saved.SelectedFolder) ?? string.Empty;
         }
@@ -869,7 +939,7 @@ public sealed class BasketWorkspace
         // are still user baskets, so they are adopted instead of being left unreachable.
         var orphanDirectories = new DirectoryInfo(_basketsRoot)
             .EnumerateDirectories("*", ChildEntriesOptions)
-            .Where(info => _tabs.All(tab => !string.Equals(tab.Uid, info.Name, StringComparison.OrdinalIgnoreCase)))
+            .Where(info => _tabs.All(tab => !string.Equals(tab.DirectoryPath, info.FullName, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(info => info.CreationTimeUtc)
             .ThenBy(info => info.Name, StringComparer.Ordinal);
 
@@ -881,7 +951,7 @@ public sealed class BasketWorkspace
             }
 
             _tabs.Add(new BasketTab(
-                directory.Name,
+                GenerateUid(),
                 UidPattern.IsMatch(directory.Name) ? DefaultNameFor(directory.FullName) : directory.Name,
                 directory.FullName));
             adopted = true;
@@ -1011,11 +1081,7 @@ public sealed class BasketWorkspace
                 return 1;
             }
 
-            var textFileName = MaterialNaming.DefaultFileName(
-                targetDirectory,
-                _formatter.FormatAsFileName(_clock.Now),
-                ".txt",
-                _text);
+            var textFileName = MaterialNaming.PastedTextFileName(targetDirectory, text, _text);
             File.WriteAllText(
                 Path.Combine(targetDirectory, textFileName),
                 text,
@@ -1087,19 +1153,7 @@ public sealed class BasketWorkspace
     {
         try
         {
-            _stateStore.Save(new WorkspaceState
-            {
-                Version = WorkspaceState.CurrentVersion,
-                ActiveUid = _activeUid,
-                Tabs = _tabs.Select(tab => new TabState
-                {
-                    Uid = tab.Uid,
-                    Name = tab.DisplayName,
-                    SelectedFolder = _currentFolderOf(tab),
-                }).ToList(),
-                Window = Geometry.Placement,
-                PreviewWidth = Geometry.PreviewWidth,
-            });
+            _stateStore.Save(CreateState());
         }
         catch (Exception ex)
         {
@@ -1107,6 +1161,27 @@ public sealed class BasketWorkspace
             StatusIsError = true;
         }
     }
+
+    private WorkspaceState CreateState(BasketRenameState? pendingRename = null) => new()
+    {
+        Version = WorkspaceState.CurrentVersion,
+        ActiveUid = _activeUid,
+        Tabs = _tabs.Select(tab => new TabState
+        {
+            Uid = tab.Uid,
+            DirectoryName = Path.GetFileName(tab.DirectoryPath),
+            Name = tab.DisplayName,
+            SelectedFolder = _currentFolderOf(tab),
+        }).ToList(),
+        PendingRename = pendingRename,
+        RecentCopiedPaths = [.. _recentCopiedPaths],
+        Window = Geometry.Placement,
+        PreviewWidth = Geometry.PreviewWidth,
+    };
+
+    private static bool IsDirectoryComponent(string? name) =>
+        !string.IsNullOrWhiteSpace(name) && name is not "." and not ".." &&
+        name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
     /// <summary>Moves a file or folder to its new name; a case-only rename goes through a temporary name.</summary>
     private static void MoveOnDisk(string sourcePath, string targetPath, bool isFolder, bool caseOnlyRename)

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('Debug','Release')][string]$Configuration = 'Debug',
     [string]$ExecutablePath
 )
@@ -13,7 +13,6 @@ $repo = Split-Path -Parent $PSScriptRoot
 $exe = if ($ExecutablePath) { (Resolve-Path -LiteralPath $ExecutablePath).Path } else {
     Join-Path $repo "src/PasteHatch.App/bin/x64/$Configuration/net10.0-windows10.0.19041.0/win-x64/PasteHatch.exe"
 }
-if (Get-Process PasteHatch -ErrorAction SilentlyContinue) { throw 'Exit PasteHatch through the tray first; its single-instance mutex is shared.' }
 if (!(Test-Path $exe)) { throw "Build $Configuration x64 first using scripts/build.ps1." }
 $run = Join-Path $repo ('.scratch/verify-pastehatch/' + [guid]::NewGuid().ToString('N'))
 $data = Join-Path $run 'data'
@@ -93,6 +92,7 @@ try {
         $null -ne $script:window -and $null -ne (Find-Control 'QuickNoteTextBox') -and (Test-Path (Join-Path $data 'state.json'))
     }
     Doctor
+    Wait-For 'owned window stays outside the desktop' { $window.Current.BoundingRectangle.Right -lt 0 -and $window.Current.BoundingRectangle.Bottom -lt 0 }
     Wait-For 'refresh button removed from toolbar' { $null -eq (Find-Control 'RefreshButton') }
     @{pid=$app.Id; started=$app.StartTime.ToString('o'); exe=$app.Path; sha256=(Get-FileHash $exe).Hash; data=$data} | ConvertTo-Json | Set-Content (Join-Path $run 'doctor.json')
 
@@ -143,6 +143,29 @@ try {
         (Find-Control 'BasketsList').Current.Name -eq (Resw 'en-US' 'Header_Baskets')
     }
     Wait-For 'English choice persisted' { (Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json).language -eq 'en' }
+    Wait-For 'basket deletion confirmation is enabled by default' {
+        (Find-Settings 'ConfirmBasketDeletionToggle').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On
+    }
+    (Find-Settings 'ConfirmBasketDeletionToggle').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+    Wait-For 'basket deletion preference is persisted' {
+        (Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json).confirmBasketDeletion -eq $false
+    }
+    $script:settingsWindow.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
+    $script:settingsWindow = $null
+    Invoke-Control 'SettingsButton'
+    Wait-For 'settings reopen with saved confirmation preference' {
+        $script:settingsWindow = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
+            [System.Windows.Automation.TreeScope]::Children,
+            [System.Windows.Automation.AndCondition]::new(
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty,[int]$app.Id),
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$englishSettingsTitle)))
+        $null -ne $script:settingsWindow -and
+        (Find-Settings 'ConfirmBasketDeletionToggle').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [System.Windows.Automation.ToggleState]::Off
+    }
+    (Find-Settings 'ConfirmBasketDeletionToggle').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+    Wait-For 'confirmation can be enabled again' {
+        (Get-Content $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json).confirmBasketDeletion -eq $true
+    }
     $script:settingsWindow.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
     $script:settingsWindow = $null
 
@@ -171,8 +194,10 @@ try {
     Wait-For 'expanded folder exposes child' { $null -ne (Find-Node 'inside.txt') }
     Select-Node 'inside.txt'
     Wait-For 'preview displays selected text' {
-        (Find-Control 'PreviewTitle').Current.Name -eq 'inside.txt' -and
-        (Find-Control 'PreviewText').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'inside content'
+        $title = Find-Control 'PreviewTitle'
+        $preview = Find-Control 'PreviewText'
+        $null -ne $title -and $null -ne $preview -and $title.Current.Name -eq 'inside.txt' -and
+        $preview.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'inside content'
     }
     Wait-For 'preview uses available panel height' {
         $previewBounds = (Find-Control 'PreviewText').Current.BoundingRectangle
@@ -200,15 +225,32 @@ try {
         Wait-For "row actions have right padding for $($entry.name)" {
             (Find-Node $entry.name).Current.BoundingRectangle.Right - $rowCopy.Current.BoundingRectangle.Right -ge 8
         }
+        $rowContent = (Find-Node $entry.name).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryCopyContentButton'))
+        Wait-For "copy path has a separate whitespace gap for $($entry.name)" {
+            $previous = if ($rowContent -and $rowContent.Current.BoundingRectangle.Width -gt 0) { $rowContent } else { $rowOpen }
+            $rowCopy.Current.BoundingRectangle.Left - $previous.Current.BoundingRectangle.Right -ge 12
+        }
         $rowCopy.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
         Wait-For "row copy path equals $($entry.name) path" { [Windows.Forms.Clipboard]::GetText() -eq $entry.path }
     }
-    $expectedPaste = 'pasted-' + [guid]::NewGuid().ToString('N')
+    Wait-For 'filesystem copy history persists folder and file events newest first' {
+        $history = @((Get-Content (Join-Path $data 'state.json') -Raw -Encoding UTF8 | ConvertFrom-Json).recentCopiedPaths)
+        $history.Count -eq 2 -and $history[0] -eq (Join-Path $basket 'folder2') -and
+        $history[1] -eq (Join-Path $basket 'folder2\inside.txt')
+    }
+    $expectedPaste = 'Первые пять слов для имени шестое ' + [guid]::NewGuid().ToString('N')
     "ACTION clipboard text=$expectedPaste" | Add-Content (Join-Path $run 'actions.txt')
     [Windows.Forms.Clipboard]::SetText($expectedPaste)
     Invoke-Control 'PasteButton'
     Wait-For 'paste writes exact text into selected folder' {
-        @(Get-ChildItem (Join-Path $basket 'folder2') -Filter '*.txt' | Where-Object { [IO.File]::ReadAllText($_.FullName) -eq $expectedPaste }).Count -eq 1
+        $pasted = Join-Path $basket 'folder2/Первые_пять_слов_для_имени.txt'
+        (Test-Path -LiteralPath $pasted) -and [IO.File]::ReadAllText($pasted) -eq $expectedPaste
+    }
+    Invoke-Control 'PasteButton'
+    Wait-For 'repeat paste keeps both exact contents with numbered collision suffix' {
+        $pasted = Join-Path $basket 'folder2/Первые_пять_слов_для_имени (2).txt'
+        (Test-Path -LiteralPath $pasted) -and [IO.File]::ReadAllText($pasted) -eq $expectedPaste
     }
     $source = Join-Path $data 'source-folder'
     New-Item -ItemType Directory -Path (Join-Path $source 'deep') | Out-Null
@@ -233,11 +275,19 @@ try {
     Wait-For 'new folder created in selected parent' { @(Get-ChildItem (Join-Path $basket 'folder2') -Directory | Where-Object { $_.FullName -notin $before }).Count -eq 1 }
     Snapshot 'workspace'
 
-    Invoke-Control 'AddBasketButton'
+    Wait-For 'both basket creation commands are available' {
+        (Find-Control 'AddBasketButton').Current.IsEnabled -and (Find-Control 'AddBasketFooterButton').Current.IsEnabled
+    }
+    Invoke-Control 'AddBasketFooterButton'
     Wait-For 'new basket persisted and active' {
         $state = Get-Content (Join-Path $data 'state.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         @($state.tabs).Count -eq 2 -and $state.activeUid -eq $state.tabs[1].uid -and
         @(Get-ChildItem (Join-Path $data 'Baskets') -Directory).Count -eq 2
+    }
+    Invoke-Control 'AddBasketButton'
+    Wait-For 'upper basket command uses the same creation and activation flow' {
+        $state = Get-Content (Join-Path $data 'state.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        @($state.tabs).Count -eq 3 -and $state.activeUid -eq $state.tabs[2].uid
     }
     Snapshot 'baskets'
     "ACTION copy an external named folder directly into Baskets" | Add-Content (Join-Path $run 'actions.txt')
@@ -247,7 +297,7 @@ try {
     Copy-Item -LiteralPath $externalSource -Destination (Join-Path $data 'Baskets') -Recurse
     Wait-For 'root watcher discovers named external basket without refresh' {
         $state = Get-Content (Join-Path $data 'state.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-        @($state.tabs | Where-Object { $_.uid -eq 'repo-grooming-skill' -and $_.name -eq 'repo-grooming-skill' }).Count -eq 1
+        @($state.tabs | Where-Object { $_.directoryName -eq 'repo-grooming-skill' -and $_.name -eq 'repo-grooming-skill' }).Count -eq 1
     }
     $externalRow = $null
     Wait-For 'external basket appears in basket rail' {
@@ -260,7 +310,16 @@ try {
     $externalRow.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
     Wait-For 'copied basket contents appear in tree' { $null -ne (Find-Node 'SKILL.md') }
     Select-Node 'SKILL.md'
-    Wait-For 'copied basket file preview preserves content' { (Find-Control 'PreviewText').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'external folder content' }
+    Wait-For 'copied basket file preview preserves content' {
+        $preview = Find-Control 'PreviewText'
+        $null -ne $preview -and $preview.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'external folder content'
+    }
+    Invoke-Control 'CopyPathButton'
+    Wait-For 'basket root copy enters history without basket activation history' {
+        $history = @((Get-Content (Join-Path $data 'state.json') -Raw -Encoding UTF8 | ConvertFrom-Json).recentCopiedPaths)
+        $history.Count -eq 3 -and $history[0] -eq (Join-Path $data 'Baskets\repo-grooming-skill') -and
+        [Windows.Forms.Clipboard]::GetText() -eq $history[0]
+    }
     Snapshot 'external-basket'
     "ACTION second launch" | Add-Content (Join-Path $run 'actions.txt')
     $second = Start-Process $exe -PassThru -WindowStyle Hidden

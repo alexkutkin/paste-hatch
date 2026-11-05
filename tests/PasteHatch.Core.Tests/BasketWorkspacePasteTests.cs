@@ -21,32 +21,55 @@ public sealed class BasketWorkspacePasteTests : IDisposable
         var added = workspace.AddFromClipboard(string.Empty);
 
         Assert.Equal(1, added);
-        var filePath = Path.Combine(directory, "Mon, 13-02.txt");
+        var filePath = Path.Combine(directory, "Grüße,_世界!_Second_line_-.txt");
         FileAssert.HasUtf8TextWithoutBom(filePath, text);
         var file = workspace.RequireSingleFile();
-        Assert.Equal("Mon, 13-02.txt", file.Name);
+        Assert.Equal("Grüße,_世界!_Second_line_-.txt", file.Name);
         Assert.Equal(MaterialKind.Text, file.Kind);
         Assert.False(workspace.StatusIsError);
     }
 
     [Fact]
-    public void AddFromClipboard_SecondTextPasteWithinSameMinute_GetsNumberedSuffix()
+    public void AddFromClipboard_TextPastesWithSameFirstFiveWords_GetNumberedSuffix()
     {
         var workspace = _harness.CreateInitializedWorkspace();
         var directory = workspace.RequireActiveTab().DirectoryPath;
 
-        _harness.Clipboard.Payload = PastePayload.FromText("first");
+        _harness.Clipboard.Payload = PastePayload.FromText("one two three four five first");
         Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
-        _harness.Clipboard.Payload = PastePayload.FromText("second");
+        _harness.Clipboard.Payload = PastePayload.FromText("one two three four five second");
         Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
-        _harness.Clipboard.Payload = PastePayload.FromText("third");
+        _harness.Clipboard.Payload = PastePayload.FromText("one two three four five third");
         Assert.Equal(1, workspace.AddFromClipboard(string.Empty));
 
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Mon, 13-02.txt"), "first");
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Mon, 13-02 (2).txt"), "second");
-        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "Mon, 13-02 (3).txt"), "third");
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "one_two_three_four_five.txt"), "one two three four five first");
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "one_two_three_four_five (2).txt"), "one two three four five second");
+        FileAssert.HasUtf8TextWithoutBom(Path.Combine(directory, "one_two_three_four_five (3).txt"), "one two three four five third");
         Assert.Equal(3, workspace.Files(string.Empty).Count);
         Assert.All(workspace.Files(string.Empty), file => Assert.Equal(MaterialKind.Text, file.Kind));
+    }
+
+    [Theory]
+    [InlineData("  Привет\tмир\r\nэто\u00a0моя\u2003заметка шестое", "Привет_мир_это_моя_заметка.txt")]
+    [InlineData("Hello, world!", "Hello,_world!.txt")]
+    [InlineData("a:b/c*?d", "a-b-c--d.txt")]
+    [InlineData("CON", "_CON.txt")]
+    [InlineData("aux.report", "_aux.report.txt")]
+    [InlineData("*? / \\\u0001 ...", "Material.txt")]
+    [InlineData("report...", "report.txt")]
+    public void AddFromClipboard_TextInNestedFolder_UsesReadableWindowsSafeName(string content, string expectedName)
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var folder = workspace.CreateFolder("nested", string.Empty);
+        Assert.NotNull(folder);
+        _harness.Clipboard.Payload = PastePayload.FromText(content);
+
+        Assert.Equal(1, workspace.AddFromClipboard("nested"));
+
+        var file = Assert.Single(workspace.Files("nested"));
+        Assert.Equal(expectedName, file.Name);
+        FileAssert.HasUtf8TextWithoutBom(file.FullPath, content);
+        Assert.Empty(workspace.Files(string.Empty));
     }
 
     [Fact]

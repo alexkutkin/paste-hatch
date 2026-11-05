@@ -18,7 +18,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
 
         workspace.Refresh();
 
-        var adopted = Assert.Single(workspace.Tabs, tab => tab.Uid == "repo-grooming-skill");
+        var adopted = Assert.Single(workspace.Tabs, tab => tab.DirectoryPath == directory);
         Assert.Equal("repo-grooming-skill", adopted.DisplayName);
         Assert.Equal(directory, adopted.DirectoryPath);
         Assert.Equal(active, workspace.ActiveTab);
@@ -35,6 +35,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var active = workspace.RequireActiveTab();
         workspace.RenameTab(active.Uid, "Custom basket");
+        active = workspace.RequireActiveTab();
         Directory.CreateDirectory(Path.Combine(active.DirectoryPath, "selected"));
         var navigation = _harness.TreeStateFor(workspace);
         navigation.Reconcile(null, []);
@@ -162,7 +163,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Assert.True(renamed);
         Assert.Equal("Reports", workspace.RequireActiveTab().DisplayName);
         Assert.Equal(tab.Uid, workspace.RequireActiveTab().Uid);
-        Assert.True(Directory.Exists(tab.DirectoryPath));
+        Assert.True(Directory.Exists(workspace.RequireActiveTab().DirectoryPath));
 
         var saved = _harness.ReadSavedState();
         var savedTab = Assert.Single(saved.Tabs);
@@ -323,7 +324,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         _harness.Store.Save(new WorkspaceState
         {
             ActiveUid = "AB2CD3",
-            Tabs = [new TabState { Uid = "AB2CD3", Name = "My basket" }],
+            Tabs = [new TabState { Uid = "AB2CD3", DirectoryName = "AB2CD3", Name = "My basket" }],
         });
 
         var workspace = _harness.CreateWorkspace();
@@ -348,8 +349,8 @@ public sealed class BasketWorkspaceTabTests : IDisposable
             ActiveUid = "AB2CD3",
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "Gone" },
-                new TabState { Uid = "GHJKLM", Name = "Second" },
+                new TabState { Uid = "AB2CD3", DirectoryName = "AB2CD3", Name = "Gone" },
+                new TabState { Uid = "GHJKLM", DirectoryName = "GHJKLM", Name = "Second" },
             ],
         });
 
@@ -380,7 +381,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         workspace.Initialize();
 
         Assert.Equal(2, workspace.Tabs.Count);
-        var namesByUid = workspace.Tabs.ToDictionary(tab => tab.Uid, tab => tab.DisplayName);
+        var namesByUid = workspace.Tabs.ToDictionary(tab => Path.GetFileName(tab.DirectoryPath), tab => tab.DisplayName);
         Assert.Equal("Mon, 13:02", namesByUid["AB2CD3"]);
         Assert.Equal("Tue, 14:30", namesByUid["GHJKLM"]);
 
@@ -402,7 +403,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         workspace.Initialize();
 
         Assert.Equal(invalidNames.Length, workspace.Tabs.Count);
-        Assert.All(workspace.Tabs, tab => Assert.Equal(tab.Uid, tab.DisplayName));
+        Assert.All(workspace.Tabs, tab => Assert.Equal(Path.GetFileName(tab.DirectoryPath), tab.DisplayName));
         Assert.Equal(invalidNames.Length, Directory.GetDirectories(_harness.Temp.BasketsRoot).Length);
         foreach (var invalidName in invalidNames)
         {
@@ -418,8 +419,8 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         {
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "First entry" },
-                new TabState { Uid = "AB2CD3", Name = "Duplicate" },
+                new TabState { Uid = "AB2CD3", DirectoryName = "AB2CD3", Name = "First entry" },
+                new TabState { Uid = "AB2CD3", DirectoryName = "AB2CD3", Name = "Duplicate" },
             ],
         });
 
@@ -438,7 +439,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Directory.SetCreationTime(directory, TestMoments.MondayAfternoon.DateTime);
         _harness.Store.Save(new WorkspaceState
         {
-            Tabs = [new TabState { Uid = "AB2CD3", Name = "   " }],
+            Tabs = [new TabState { Uid = "AB2CD3", DirectoryName = "AB2CD3", Name = "   " }],
         });
 
         var workspace = _harness.CreateWorkspace();
@@ -457,8 +458,8 @@ public sealed class BasketWorkspaceTabTests : IDisposable
             ActiveUid = "GHJKLM",
             Tabs =
             [
-                new TabState { Uid = "AB2CD3", Name = "First" },
-                new TabState { Uid = "GHJKLM", Name = "Second" },
+                new TabState { Uid = "AB2CD3", DirectoryName = "AB2CD3", Name = "First" },
+                new TabState { Uid = "GHJKLM", DirectoryName = "GHJKLM", Name = "Second" },
             ],
         });
 

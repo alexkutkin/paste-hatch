@@ -19,7 +19,7 @@ To verify Release, use `powershell -STA -ExecutionPolicy Bypass -File scripts\ve
 To verify a release ZIP, extract it and pass `-ExecutablePath <extracted-PasteHatch.exe>` instead.
 The script does not build automatically. It starts from an empty GUID-specific data root. Ready means its own PID's UIA window, note input and initialized state exist. No auth or seed is needed; workspace fixtures are added later as external filesystem changes.
 
-SingleInstanceGuard uses a session-wide mutex: changing PASTEHATCH_DATA_ROOT does not permit concurrent instances. The helper refuses if PasteHatch is already running. Ask the user to exit through tray Exit; never stop their instance without authorization. Tests use the shared Windows clipboard: avoid copying during a run. The helper materializes existing clipboard formats before its first clipboard operation and restores them during cleanup; providers with unusual delayed/custom formats may not round-trip perfectly.
+Offscreen launches with an explicit PASTEHATCH_DATA_ROOT use mutex and event names scoped to that root. The helper can run beside the owner's normal instance without activating or stopping it; its second launch uses the same test root and exits. Normal launches retain the session-wide single-instance behavior. Run only a freshly built executable with this isolation support. Tests use the shared Windows clipboard: avoid copying during a run. The helper materializes existing clipboard formats before its first clipboard operation and restores them during cleanup; providers with unusual delayed/custom formats may not round-trip perfectly.
 
 ## Doctor
 

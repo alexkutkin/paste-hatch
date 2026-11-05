@@ -231,4 +231,7 @@
   <data name="Settings_Version" xml:space="preserve"><value>Версия {0}</value></data>
   <data name="Action_ResetSettings" xml:space="preserve"><value>Сбросить настройки</value></data>
   <data name="Action_Done" xml:space="preserve"><value>Готово</value></data>
+  <data name="Settings_ConfirmBasketDeletion" xml:space="preserve"><value>Подтверждать удаление корзин</value></data>
+  <data name="Settings_ConfirmBasketDeletionDesc" xml:space="preserve"><value>Спрашивать перед перемещением корзины и её содержимого в корзину Windows.</value></data>
+  <data name="Tray_RecentCopiedPaths" xml:space="preserve"><value>Недавно скопированные пути</value></data>
 </root>

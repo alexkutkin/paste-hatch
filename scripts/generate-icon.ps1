@@ -2,7 +2,8 @@
 # taskbar and notification-area icon share one source. Run from the repository root:
 #   powershell -ExecutionPolicy Bypass -File scripts/generate-icon.ps1
 param(
-    [string]$OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'src\PasteHatch.App\Assets\PasteHatch.ico')
+    [string]$OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'src\PasteHatch.App\Assets\PasteHatch.ico'),
+    [string]$PreviewPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'docs\images\icon.png')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,40 +28,36 @@ function Get-IconBitmap([int]$size) {
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $graphics.Clear([System.Drawing.Color]::Transparent)
 
-    $inset = [Math]::Max(1.0, $size * 0.06)
+    $inset = [Math]::Max(2.0, $size * 0.06)
     $background = New-RoundedRectPath $inset $inset ($size - 2 * $inset) ($size - 2 * $inset) ([Math]::Max(3.0, $size * 0.22))
     $backgroundBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 15, 108, 189))
     $graphics.FillPath($backgroundBrush, $background)
     $backgroundBrush.Dispose()
     $background.Dispose()
 
-    # Basket body: rounded rectangle with a handle arc above it and two vertical slats.
-    $penWidth = [Math]::Max(1.2, $size * 0.075)
-    $whitePen = New-Object System.Drawing.Pen([System.Drawing.Color]::White, $penWidth)
-    $whitePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $whitePen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $whitePen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-
-    $left = $size * 0.22
-    $right = $size * 0.78
-    $top = $size * 0.46
-    $bottom = $size * 0.78
-    $body = New-RoundedRectPath $left $top ($right - $left) ($bottom - $top) ([Math]::Max(1.0, $size * 0.06))
-    $graphics.DrawPath($whitePen, $body)
-    $body.Dispose()
-
-    $handle = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $handle.AddArc($size * 0.35, $size * 0.24, $size * 0.30, $size * 0.34, 200, 140)
-    $graphics.DrawPath($whitePen, $handle)
-    $handle.Dispose()
-
-    $slatPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 15, 108, 189), $penWidth)
-    $slatPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $slatPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $graphics.DrawLine($slatPen, $size * 0.40, $size * 0.54, $size * 0.40, $size * 0.70)
-    $graphics.DrawLine($slatPen, $size * 0.60, $size * 0.54, $size * 0.60, $size * 0.70)
-    $slatPen.Dispose()
-    $whitePen.Dispose()
+    # Design on a 16px grid: a book and a storage box stand on one shelf.
+    # Solid shapes and open gaps retain the silhouette in the notification area.
+    $unit = $size / 16.0
+    $itemBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
+    try {
+        $graphics.FillRectangle($itemBrush, [float](4 * $unit), [float](3 * $unit), [float](2 * $unit), [float](7 * $unit))
+        $graphics.FillRectangle($itemBrush, [float](7 * $unit), [float](6 * $unit), [float](5 * $unit), [float](4 * $unit))
+        $handleBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 15, 108, 189))
+        try {
+            $graphics.FillRectangle($handleBrush, [float](9 * $unit), [float](7 * $unit), [float]$unit, [float]$unit)
+        }
+        finally {
+            $handleBrush.Dispose()
+        }
+        $shelf = New-RoundedRectPath (3 * $unit) (10 * $unit) (10 * $unit) (2 * $unit) (0.4 * $unit)
+        $graphics.FillPath($itemBrush, $shelf)
+        $shelf.Dispose()
+        $graphics.FillRectangle($itemBrush, [float](4 * $unit), [float](12 * $unit), [float]$unit, [float]$unit)
+        $graphics.FillRectangle($itemBrush, [float](11 * $unit), [float](12 * $unit), [float]$unit, [float]$unit)
+    }
+    finally {
+        $itemBrush.Dispose()
+    }
 
     $graphics.Dispose()
     return $bitmap
@@ -170,3 +167,17 @@ finally {
 }
 
 Write-Host "Wrote $OutputPath ($((Get-Item $OutputPath).Length) bytes, $($sizeList.Count) sizes)"
+
+# Keep the documentation artwork generated from the very same drawing as the ICO.
+$previewDir = Split-Path -Parent $PreviewPath
+if (-not (Test-Path $previewDir)) {
+    New-Item -ItemType Directory -Force -Path $previewDir | Out-Null
+}
+$preview = Get-IconBitmap 256
+try {
+    $preview.Save($PreviewPath, [System.Drawing.Imaging.ImageFormat]::Png)
+}
+finally {
+    $preview.Dispose()
+}
+Write-Host "Wrote $PreviewPath (256px transparent PNG)"

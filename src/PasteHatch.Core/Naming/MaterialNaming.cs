@@ -48,6 +48,36 @@ public static class MaterialNaming
         return UniqueFileName(directory, desired, text);
     }
 
+    /// <summary>Names raw pasted text from its first five whitespace-separated words.</summary>
+    public static string PastedTextFileName(string directory, string content, ITextProvider text)
+    {
+        var words = content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Take(5);
+        var baseName = TabNameFormatter.SanitizeFileName(string.Join('_', words));
+        baseName = baseName[..Math.Min(baseName.Length, MaxBaseNameLength)].TrimEnd(' ', '.');
+        if (baseName.Length > 0 && char.IsHighSurrogate(baseName[^1]))
+        {
+            baseName = baseName[..^1];
+        }
+
+        if (baseName.Trim('-', '_', '.').Length == 0)
+        {
+            baseName = text.Get("Name_DefaultMaterial");
+        }
+
+        if (IsReservedDeviceName(baseName))
+        {
+            baseName = "_" + baseName[..Math.Min(baseName.Length, MaxBaseNameLength - 1)];
+            if (char.IsHighSurrogate(baseName[^1]))
+            {
+                baseName = baseName[..^1];
+            }
+
+            baseName = baseName.TrimEnd(' ', '.');
+        }
+
+        return UniqueFileName(directory, $"{baseName}.txt", text);
+    }
+
     public static bool TryGetLink(string? text, out Uri? link)
     {
         link = null;
@@ -157,6 +187,7 @@ public static class MaterialNaming
             "CON" or "PRN" or "AUX" or "NUL" => true,
             "COM1" or "COM2" or "COM3" or "COM4" or "COM5" or "COM6" or "COM7" or "COM8" or "COM9" => true,
             "LPT1" or "LPT2" or "LPT3" or "LPT4" or "LPT5" or "LPT6" or "LPT7" or "LPT8" or "LPT9" => true,
+            "COM¹" or "COM²" or "COM³" or "LPT¹" or "LPT²" or "LPT³" => true,
             _ => false,
         };
     }
