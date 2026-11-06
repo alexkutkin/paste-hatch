@@ -55,17 +55,7 @@ public sealed partial class SettingsWindow : Window
             typeof(App).Assembly.GetName().Version?.ToString() ?? "1.0.0");
     }
 
-    private void ApplyTheme()
-    {
-        try
-        {
-            WindowTitleBarTheme.Apply(this, SettingsRoot.ActualTheme);
-        }
-        catch (Exception)
-        {
-            // Cosmetic only.
-        }
-    }
+    private void ApplyTheme() => WindowTitleBarTheme.Apply(this, SettingsRoot.ActualTheme);
 
     private void ConfigureWindow()
     {
@@ -76,14 +66,7 @@ public sealed partial class SettingsWindow : Window
             presenter.IsMinimizable = true;
         }
 
-        try
-        {
-            AppIcon.ApplyToWindow(this);
-        }
-        catch (Exception)
-        {
-            // Cosmetic only.
-        }
+        AppIcon.ApplyToWindow(this);
 
         if (string.Equals(
             Environment.GetEnvironmentVariable("PASTEHATCH_TEST_OFFSCREEN"), "1", StringComparison.Ordinal))

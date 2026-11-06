@@ -140,7 +140,8 @@ public sealed class WorkspaceRefreshCoordinatorTests : IDisposable
         Drain();
         Assert.Contains(workspace.GetEntries(string.Empty), e => e.Name == "external.txt");
         Assert.Equal(1, _watcher.Suppressions);
-        Assert.True(_renders.All(tree => tree));
+        Assert.NotEmpty(_renders);
+        Assert.All(_renders, tree => Assert.True(tree));
     }
 
     [Fact]

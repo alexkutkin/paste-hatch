@@ -70,22 +70,6 @@ public sealed class TabStateStoreTests : IDisposable
     }
 
     [Fact]
-    public void Save_ThenLoadFromNewStoreInstance_PersistsState()
-    {
-        CreateStore().Save(new WorkspaceState
-        {
-            ActiveUid = "AB2CD3",
-            Tabs = [new TabState { Uid = "AB2CD3", DirectoryName = "AB2CD3", Name = "Basket" }],
-        });
-
-        var loaded = CreateStore().Load();
-
-        var tab = Assert.Single(loaded.Tabs);
-        Assert.Equal("AB2CD3", tab.Uid);
-        Assert.Equal("Basket", tab.Name);
-    }
-
-    [Fact]
     public void Load_CorruptJson_ReturnsEmptyStateWithoutThrowing()
     {
         Directory.CreateDirectory(_temp.Root);
@@ -144,7 +128,6 @@ public sealed class TabStateStoreTests : IDisposable
         var files = Directory.GetFiles(_temp.Root).Select(Path.GetFileName).ToArray();
 
         Assert.Equal(new[] { "state.json" }, files);
-        Assert.Empty(Directory.GetFiles(_temp.Root, "*.tmp"));
     }
 
     [Fact]

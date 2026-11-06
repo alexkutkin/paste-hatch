@@ -6,8 +6,18 @@ namespace PasteHatch.Core;
 /// so no caller has to keep a second copy in sync. Selection survives tree rebuilds; switching
 /// baskets selects their first root entry. Vanished paths fall back to the nearest existing parent.
 /// </summary>
-public sealed class BasketTreeNavigation(BasketWorkspace workspace)
+public sealed class BasketTreeNavigation
 {
+    private readonly BasketWorkspace _workspace;
+
+    internal BasketTreeNavigation(BasketWorkspace workspace) => _workspace = workspace;
+
+    internal void Reset()
+    {
+        _views.Clear();
+        _displayedUid = null;
+    }
+
     private readonly Dictionary<string, TreeSelection> _views = new(StringComparer.Ordinal);
     private string? _displayedUid;
 
@@ -19,7 +29,7 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
     {
         get
         {
-            var tab = workspace.ActiveTab;
+            var tab = _workspace.ActiveTab;
             if (tab is null)
             {
                 return string.Empty;
@@ -33,7 +43,7 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
 
     /// <summary>Current folder of any basket, for recording it in the state file.</summary>
     public string FolderFor(string uid)
-        => _views.TryGetValue(uid, out var view) ? view.Folder : workspace.SavedFolderFor(uid);
+        => _views.TryGetValue(uid, out var view) ? view.Folder : _workspace.SavedFolderFor(uid);
 
     /// <summary>
     /// Reconciles tree state with the basket that is active now. The arguments describe the tree as
@@ -42,28 +52,28 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
     /// </summary>
     public TreeSelection Reconcile(BasketEntry? displayedSelection, IReadOnlyCollection<string> displayedExpanded)
     {
-        var isBasketSwitch = _displayedUid is not null && _displayedUid != workspace.ActiveTab?.Uid;
+        var isBasketSwitch = _displayedUid is not null && _displayedUid != _workspace.ActiveTab?.Uid;
         if (_displayedUid is not null)
         {
             Capture(displayedSelection, displayedExpanded, _displayedUid);
         }
 
-        var tab = workspace.ActiveTab;
+        var tab = _workspace.ActiveTab;
         _displayedUid = tab?.Uid;
         if (tab is null)
         {
             return new TreeSelection(string.Empty, string.Empty, []);
         }
 
-        foreach (var uid in _views.Keys.Where(uid => workspace.Tabs.All(t => t.Uid != uid)).ToArray())
+        foreach (var uid in _views.Keys.Where(uid => _workspace.Tabs.All(t => t.Uid != uid)).ToArray())
         {
             _views.Remove(uid);
         }
 
         var view = _views.GetValueOrDefault(tab.Uid)
-            ?? new TreeSelection(workspace.SavedFolderFor(tab.Uid), workspace.SavedFolderFor(tab.Uid), []);
+            ?? new TreeSelection(_workspace.SavedFolderFor(tab.Uid), _workspace.SavedFolderFor(tab.Uid), []);
 
-        var path = isBasketSwitch ? workspace.GetEntries(string.Empty).FirstOrDefault()?.RelativePath ?? string.Empty : view.Path;
+        var path = isBasketSwitch ? _workspace.GetEntries(string.Empty).FirstOrDefault()?.RelativePath ?? string.Empty : view.Path;
         BasketEntry? entry;
         while ((entry = Find(path)) is null && path.Length > 0)
         {
@@ -79,10 +89,9 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
         return reconciled with { IsBasketSwitch = isBasketSwitch };
     }
 
-    /// <summary>Records the item the user selected in the displayed tree.</summary>
     public void Select(BasketEntry? entry)
     {
-        var uid = _displayedUid ?? workspace.ActiveTab?.Uid;
+        var uid = _displayedUid ?? _workspace.ActiveTab?.Uid;
         if (uid is null)
         {
             return;
@@ -98,7 +107,7 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
 
     public IReadOnlyList<FolderCrumb> Breadcrumbs()
     {
-        var tab = workspace.ActiveTab;
+        var tab = _workspace.ActiveTab;
         if (tab is null) return [];
         var crumbs = new List<FolderCrumb> { new(tab.DisplayName, string.Empty) };
         var path = string.Empty;
@@ -113,7 +122,7 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
     public string ParentFolder => Parent(CurrentFolder);
 
     private TreeSelection CurrentView
-        => _views.GetValueOrDefault(_displayedUid ?? workspace.ActiveTab?.Uid ?? string.Empty)
+        => _views.GetValueOrDefault(_displayedUid ?? _workspace.ActiveTab?.Uid ?? string.Empty)
             ?? new TreeSelection(string.Empty, string.Empty, []);
 
     private void Capture(BasketEntry? displayedSelection, IReadOnlyCollection<string> displayedExpanded, string uid)
@@ -132,17 +141,16 @@ public sealed class BasketTreeNavigation(BasketWorkspace workspace)
 
     private BasketEntry? Find(string path)
     {
-        var tab = workspace.ActiveTab;
+        var tab = _workspace.ActiveTab;
         if (tab is null) return null;
         if (path.Length == 0) return new BasketEntry(tab.DisplayName, tab.DirectoryPath, string.Empty, true, MaterialKind.File);
-        return workspace.GetEntries(Parent(path)).FirstOrDefault(e =>
+        return _workspace.GetEntries(Parent(path)).FirstOrDefault(e =>
             string.Equals(e.RelativePath, path, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string Parent(string path) => Path.GetDirectoryName(path) ?? string.Empty;
 }
 
-/// <summary>What to select and expand when a basket's tree is rendered.</summary>
 public sealed record TreeSelection(string Path, string Folder, IReadOnlyList<string> ExpandedPaths)
 {
     /// <summary>True only for the reconciliation that changes the displayed basket.</summary>

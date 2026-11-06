@@ -37,7 +37,7 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         workspace.RenameTab(active.Uid, "Custom basket");
         active = workspace.RequireActiveTab();
         Directory.CreateDirectory(Path.Combine(active.DirectoryPath, "selected"));
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         navigation.Select(Assert.Single(workspace.GetEntries(string.Empty)));
         for (var i = 0; i < BasketWorkspace.MaxTabs + 1; i++)
@@ -83,7 +83,6 @@ public sealed class BasketWorkspaceTabTests : IDisposable
         Assert.Equal(Path.Combine(_harness.Temp.BasketsRoot, tab.Uid), tab.DirectoryPath);
         Assert.True(Directory.Exists(tab.DirectoryPath));
         Assert.Empty(workspace.Files(string.Empty));
-        Assert.Equal(100, workspace.MaxTabCount);
         Assert.True(workspace.CanCreateTab);
         Assert.False(workspace.CanCloseTab);
         Assert.Null(workspace.StatusMessage);

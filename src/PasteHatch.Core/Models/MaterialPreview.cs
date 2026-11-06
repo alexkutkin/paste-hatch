@@ -2,10 +2,6 @@ using System.Text;
 
 namespace PasteHatch.Core;
 
-/// <summary>
-/// Bounded text reads for the preview pane. Only plain text and Markdown are previewed; other
-/// materials keep their type label. The bound keeps a large file from blocking the UI.
-/// </summary>
 public static class MaterialPreview
 {
     /// <summary>
@@ -17,36 +13,27 @@ public static class MaterialPreview
         ArgumentException.ThrowIfNullOrWhiteSpace(fullPath);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCharacters);
 
-        using var stream = new FileStream(
-            fullPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete);
-
-        // Encoding.UTF8 uses replacement fallback, so invalid bytes never throw; the BOM is
-        // detected and stripped so it cannot leak into the preview.
-        using var reader = new StreamReader(
-            stream,
-            Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: true);
+        using var reader = OpenReader(fullPath);
 
         var buffer = new char[maxCharacters];
         var read = reader.ReadBlock(buffer, 0, buffer.Length);
         return new string(buffer, 0, read);
     }
 
-    /// <summary>Reads a whole text file, detecting a byte order mark like <see cref="ReadText"/>.</summary>
     public static string ReadAllText(string fullPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fullPath);
 
-        using var stream = new FileStream(
-            fullPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        using var reader = OpenReader(fullPath);
         return reader.ReadToEnd();
+    }
+
+    private static StreamReader OpenReader(string fullPath)
+    {
+        var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        // Detect BOMs; malformed UTF-8 uses replacement characters rather than failing preview.
+        return new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
     }
 
     /// <summary>

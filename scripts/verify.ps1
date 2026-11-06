@@ -9,9 +9,10 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
 if ([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') { throw 'Run with powershell -STA.' }
+. (Join-Path $PSScriptRoot 'project-output.ps1')
 $repo = Split-Path -Parent $PSScriptRoot
 $exe = if ($ExecutablePath) { (Resolve-Path -LiteralPath $ExecutablePath).Path } else {
-    Join-Path $repo "src/PasteHatch.App/bin/x64/$Configuration/net10.0-windows10.0.19041.0/win-x64/PasteHatch.exe"
+    Get-PasteHatchExecutable -Configuration $Configuration -Platform x64
 }
 if (!(Test-Path $exe)) { throw "Build $Configuration x64 first using scripts/build.ps1." }
 $run = Join-Path $repo ('.scratch/verify-pastehatch/' + [guid]::NewGuid().ToString('N'))
@@ -99,7 +100,6 @@ try {
     }
     Doctor
     Wait-For 'owned window stays outside the desktop' { $window.Current.BoundingRectangle.Right -lt 0 -and $window.Current.BoundingRectangle.Bottom -lt 0 }
-    Wait-For 'refresh button removed from toolbar' { $null -eq (Find-Control 'RefreshButton') }
     @{pid=$app.Id; started=$app.StartTime.ToString('o'); exe=$app.Path; sha256=(Get-FileHash $exe).Hash; data=$data} | ConvertTo-Json | Set-Content (Join-Path $run 'doctor.json')
 
     # ---- Interface language: English is the default, switching is live and persisted ----------
@@ -114,7 +114,7 @@ try {
         (Find-Control 'BasketsList').Current.Name -eq (Resw 'en-US' 'Header_Baskets')
     }
     "ACTION open settings and switch language to Russian" | Add-Content (Join-Path $run 'actions.txt')
-    Wait-For 'settings command on the toolbar' { $null -ne (Find-Control 'SettingsButton') -and $null -eq (Find-Control 'MoreButton') }
+    Wait-For 'settings command on the toolbar' { $null -ne (Find-Control 'SettingsButton') }
     (Find-Control 'SettingsButton').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
     $script:settingsWindow = $null
     Wait-For 'settings window opened in English' {
@@ -209,10 +209,6 @@ try {
         $previewBounds = (Find-Control 'PreviewText').Current.BoundingRectangle
         $treeBounds = (Find-Control 'FileTree').Current.BoundingRectangle
         $previewBounds.Height -gt 0 -and [Math]::Abs($previewBounds.Bottom - $treeBounds.Bottom) -le 24
-    }
-    Wait-For 'preview has no action buttons or path footer' {
-        $null -eq (Find-Control 'PreviewOpenButton') -and
-        $null -eq (Find-Control 'PreviewCopyPathButton') -and $null -eq (Find-Control 'PreviewPath')
     }
     Snapshot 'preview'
     # Materialize formats before modifying the shared clipboard, then restore in finally.

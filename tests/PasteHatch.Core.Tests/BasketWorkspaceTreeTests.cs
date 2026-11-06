@@ -44,7 +44,7 @@ public sealed class BasketWorkspaceTreeTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         Directory.CreateDirectory(Path.Combine(workspace.RequireActiveTab().DirectoryPath, "sub"));
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         navigation.Select(Assert.Single(workspace.GetEntries(string.Empty)));
         workspace.SaveState();
@@ -52,7 +52,7 @@ public sealed class BasketWorkspaceTreeTests : IDisposable
         var restarted = _harness.CreateWorkspace();
         restarted.Initialize();
 
-        Assert.Equal("sub", _harness.TreeStateFor(restarted).Reconcile(null, []).Folder);
+        Assert.Equal("sub", restarted.Navigation.Reconcile(null, []).Folder);
         Assert.Equal("sub", _harness.ReadSavedState().Tabs[0].SelectedFolder);
     }
 
@@ -200,7 +200,7 @@ public sealed class BasketWorkspaceTreeTests : IDisposable
         var folder = workspace.CreateFolder("work", string.Empty);
 
         Assert.NotNull(folder);
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         navigation.Select(folder);
         workspace.SaveState();

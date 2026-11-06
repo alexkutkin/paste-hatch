@@ -96,11 +96,13 @@ public sealed class BasketIdentityTests : IDisposable
     }
 
     [Theory]
-    [InlineData(2, false)]
-    [InlineData(3, true)]
-    public void Rename_StateWriteFailureReportsFailureAndRestoresOneStableBasket(int failingSave, bool moved)
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Rename_StateWriteFailureReportsFailureAndRestoresOneStableBasket(bool moved)
     {
-        var store = new FailingStore(_harness.Store, failingSave);
+        var store = new FailingStore(_harness.Store, state => moved
+            ? state.PendingRename is null && state.Tabs.Any(tab => tab.DirectoryName == "Saved_basket")
+            : state.PendingRename is not null);
         var workspace = new BasketWorkspace(_harness.Temp.BasketsRoot, store, _harness.Clipboard,
             _harness.Shell, _harness.Confirmations, _harness.Clock, text: _harness.Text);
         workspace.Initialize();
@@ -211,7 +213,7 @@ public sealed class BasketIdentityTests : IDisposable
         var before = workspace.RequireActiveTab();
         Directory.CreateDirectory(Path.Combine(before.DirectoryPath, "nested"));
         File.WriteAllText(Path.Combine(before.DirectoryPath, "nested", "note.txt"), "safe");
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         var selected = Assert.Single(workspace.GetEntries(string.Empty));
         navigation.Select(selected);
@@ -261,13 +263,17 @@ public sealed class BasketIdentityTests : IDisposable
         }
     }
 
-    private sealed class FailingStore(ITabStateStore inner, int failingSave) : ITabStateStore
+    private sealed class FailingStore(ITabStateStore inner, Func<WorkspaceState, bool> shouldFail) : ITabStateStore
     {
-        private int _saves;
+        private bool _failed;
         public WorkspaceState Load() => inner.Load();
         public void Save(WorkspaceState state)
         {
-            if (++_saves == failingSave) throw new IOException("State writer unavailable.");
+            if (!_failed && shouldFail(state))
+            {
+                _failed = true;
+                throw new IOException("State writer unavailable.");
+            }
             inner.Save(state);
         }
     }

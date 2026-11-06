@@ -12,7 +12,7 @@ public sealed class BasketTreeNavigationTests : IDisposable
         var first = workspace.RequireActiveTab();
         File.WriteAllText(Path.Combine(first.DirectoryPath, "note10.txt"), "ten");
         File.WriteAllText(Path.Combine(first.DirectoryPath, "note2.txt"), "two");
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         var selected = workspace.GetEntries("").Single(entry => entry.Name == "note10.txt");
         navigation.Select(selected);
@@ -34,7 +34,7 @@ public sealed class BasketTreeNavigationTests : IDisposable
         var root = workspace.RequireActiveTab().DirectoryPath;
         Directory.CreateDirectory(Path.Combine(root, "same"));
         File.WriteAllText(Path.Combine(root, "same", "note.txt"), "note");
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
 
         navigation.Select(Assert.Single(workspace.GetEntries("same")));
@@ -54,7 +54,7 @@ public sealed class BasketTreeNavigationTests : IDisposable
         var first = workspace.RequireActiveTab();
         Directory.CreateDirectory(Path.Combine(first.DirectoryPath, "same"));
         File.WriteAllText(Path.Combine(first.DirectoryPath, "same", "first.txt"), "first");
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         var selected = Assert.Single(workspace.GetEntries("same"));
         navigation.Select(selected);
@@ -82,7 +82,7 @@ public sealed class BasketTreeNavigationTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var root = workspace.RequireActiveTab().DirectoryPath;
         File.WriteAllText(Path.Combine(root, "second.txt"), "second");
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         var selected = Assert.Single(workspace.GetEntries(""));
         navigation.Select(selected);
@@ -98,7 +98,7 @@ public sealed class BasketTreeNavigationTests : IDisposable
     public void SwitchingToEmptyBasket_SelectsRootWithoutRepeatingSwitchOnRefresh()
     {
         var workspace = _harness.CreateInitializedWorkspace();
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         workspace.CreateAndRequireTab();
 
@@ -120,7 +120,7 @@ public sealed class BasketTreeNavigationTests : IDisposable
         Directory.CreateDirectory(Path.Combine(first.DirectoryPath, "folder2"));
         File.WriteAllText(Path.Combine(first.DirectoryPath, "folder2", "inside.txt"), "inside");
         File.WriteAllText(Path.Combine(first.DirectoryPath, "a.txt"), "file before folder alphabetically");
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         workspace.CreateAndRequireTab();
         navigation.Reconcile(null, []);
@@ -139,7 +139,7 @@ public sealed class BasketTreeNavigationTests : IDisposable
         var root = workspace.RequireActiveTab().DirectoryPath;
         Directory.CreateDirectory(Path.Combine(root, "parent", "child"));
         File.WriteAllText(Path.Combine(root, "parent", "child", "file.txt"), "test");
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         var selected = Assert.Single(workspace.GetEntries(Path.Combine("parent", "child")));
         navigation.Select(selected);
@@ -160,7 +160,7 @@ public sealed class BasketTreeNavigationTests : IDisposable
         var workspace = _harness.CreateInitializedWorkspace();
         var root = workspace.RequireActiveTab().DirectoryPath;
         Directory.CreateDirectory(Path.Combine(root, "parent", "child"));
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         var child = Assert.Single(workspace.GetEntries("parent"));
         navigation.Select(child);
@@ -177,16 +177,35 @@ public sealed class BasketTreeNavigationTests : IDisposable
     {
         var workspace = _harness.CreateInitializedWorkspace();
         Directory.CreateDirectory(Path.Combine(workspace.RequireActiveTab().DirectoryPath, "saved", "nested"));
-        var navigation = _harness.TreeStateFor(workspace);
+        var navigation = workspace.Navigation;
         navigation.Reconcile(null, []);
         navigation.Select(Assert.Single(workspace.GetEntries("saved")));
         workspace.SaveState();
 
         var restarted = _harness.CreateInitializedWorkspace();
-        var restartedNavigation = _harness.TreeStateFor(restarted);
+        var restartedNavigation = restarted.Navigation;
 
         Assert.Equal(Path.Combine("saved", "nested"), restartedNavigation.Reconcile(null, []).Path);
         Assert.Equal(new[] { "", "saved", Path.Combine("saved", "nested") },
             restartedNavigation.Breadcrumbs().Select(c => c.RelativePath));
+    }
+
+    [Fact]
+    public void Reinitialize_RestoresSelectionFromReloadedState()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var root = workspace.RequireActiveTab().DirectoryPath;
+        Directory.CreateDirectory(Path.Combine(root, "previous"));
+        Directory.CreateDirectory(Path.Combine(root, "restored"));
+        workspace.Navigation.Reconcile(null, []);
+        workspace.Navigation.Select(workspace.GetEntries("").Single(entry => entry.Name == "previous"));
+        workspace.SaveState();
+        var state = _harness.ReadSavedState();
+        state.Tabs[0].SelectedFolder = "restored";
+        _harness.Store.Save(state);
+
+        workspace.Initialize();
+
+        Assert.Equal("restored", workspace.Navigation.Reconcile(null, []).Folder);
     }
 }

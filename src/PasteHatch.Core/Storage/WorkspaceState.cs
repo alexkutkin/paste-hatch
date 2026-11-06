@@ -33,7 +33,6 @@ public sealed class TabState
     /// <summary>Stable internal basket identity, independent of its directory name.</summary>
     public string Uid { get; set; } = string.Empty;
 
-    /// <summary>User-visible basket name.</summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>One directory component under the baskets root.</summary>

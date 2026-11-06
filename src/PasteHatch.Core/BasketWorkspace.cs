@@ -40,7 +40,6 @@ public sealed class BasketWorkspace
     private readonly List<BasketTab> _tabs = [];
     private readonly List<string> _recentCopiedPaths = [];
     private readonly Dictionary<string, string> _savedFolders = new(StringComparer.Ordinal);
-    private readonly Func<BasketTab, string> _currentFolderOf;
     private string? _activeUid;
 
     public BasketWorkspace(
@@ -52,7 +51,6 @@ public sealed class BasketWorkspace
         IClock? clock = null,
         TabNameFormatter? formatter = null,
         ITextProvider? text = null,
-        Func<BasketTab, string>? currentFolderOf = null,
         Func<bool>? confirmBasketDeletion = null)
     {
         _basketsRoot = basketsRoot;
@@ -65,7 +63,7 @@ public sealed class BasketWorkspace
         _confirmBasketDeletion = confirmBasketDeletion ?? (() => true);
         _clock = clock ?? SystemClock.Instance;
         _formatter = formatter ?? new TabNameFormatter();
-        _currentFolderOf = currentFolderOf ?? (_ => string.Empty);
+        Navigation = new BasketTreeNavigation(this);
     }
 
     public event EventHandler<WorkspaceChange>? Changed;
@@ -76,6 +74,8 @@ public sealed class BasketWorkspace
     public IReadOnlyList<string> RecentCopiedPaths => _recentCopiedPaths.AsReadOnly();
 
     public string BasketsRoot => _basketsRoot;
+
+    public BasketTreeNavigation Navigation { get; }
 
     /// <summary>Window geometry recorded in the state file; the window owns its values.</summary>
     public WindowGeometry Geometry { get; } = new();
@@ -89,13 +89,13 @@ public sealed class BasketWorkspace
     public IReadOnlyList<BasketEntry> GetEntries(string? relativeFolder)
     {
         var tab = ActiveTab;
-        var normalized = NormalizeRelativePath(relativeFolder);
-        if (tab is null || normalized is null)
+        var target = ResolveFolder(relativeFolder);
+        if (tab is null || target is null)
         {
             return [];
         }
 
-        var directory = normalized.Length == 0 ? tab.DirectoryPath : Path.Combine(tab.DirectoryPath, normalized);
+        var directory = target.Path;
         if (!Directory.Exists(directory))
         {
             return [];
@@ -141,14 +141,13 @@ public sealed class BasketWorkspace
     /// <summary>True when a folder has at least one visible child, so the tree shows a chevron.</summary>
     public bool HasEntries(string? relativeFolder)
     {
-        var tab = ActiveTab;
-        var normalized = NormalizeRelativePath(relativeFolder);
-        if (tab is null || normalized is null)
+        var target = ResolveFolder(relativeFolder);
+        if (target is null)
         {
             return false;
         }
 
-        var directory = normalized.Length == 0 ? tab.DirectoryPath : Path.Combine(tab.DirectoryPath, normalized);
+        var directory = target.Path;
         if (!Directory.Exists(directory))
         {
             return false;
@@ -164,16 +163,13 @@ public sealed class BasketWorkspace
         }
     }
 
-    /// <summary>Writes the current tab state immediately (used when hiding to the tray or exiting).</summary>
     public void SaveState() => SaveStateQuietly();
 
     /// <summary>
     /// Folder this basket had open when the state file was last read. Tree state owns the current
     /// folder; this is only the seed it restores on the first reconcile after a launch.
     /// </summary>
-    public string SavedFolderFor(string uid) => _savedFolders.GetValueOrDefault(uid, string.Empty);
-
-    public int MaxTabCount => MaxTabs;
+    internal string SavedFolderFor(string uid) => _savedFolders.GetValueOrDefault(uid, string.Empty);
 
     public bool CanCreateTab => _tabs.Count < MaxTabs;
 
@@ -185,7 +181,6 @@ public sealed class BasketWorkspace
     /// <summary>True when <see cref="StatusMessage"/> describes an error that should stay visible.</summary>
     public bool StatusIsError { get; private set; }
 
-    /// <summary>Restores open baskets from the state file and from the folders still on disk.</summary>
     public void Initialize()
     {
         Directory.CreateDirectory(_basketsRoot);
@@ -197,6 +192,7 @@ public sealed class BasketWorkspace
 
         _tabs.Clear();
         _savedFolders.Clear();
+        Navigation.Reset();
         LoadTabs(state);
 
         if (_tabs.Count == 0)
@@ -251,7 +247,6 @@ public sealed class BasketWorkspace
         return true;
     }
 
-    /// <summary>Renames the physical basket folder while retaining its stable identity.</summary>
     public bool RenameTab(string uid, string? newName)
     {
         var index = _tabs.FindIndex(tab => tab.Uid == uid);
@@ -283,17 +278,8 @@ public sealed class BasketWorkspace
         {
             // Persist the intent before touching disk. A failed write leaves the old basket intact.
             _stateStore.Save(CreateState(intent));
-            if (!samePath)
-            {
-                if (caseOnly)
-                {
-                    var temporary = Path.Combine(_basketsRoot, intent.TemporaryDirectoryName);
-                    Directory.Move(tab.DirectoryPath, temporary);
-                    try { Directory.Move(temporary, target); }
-                    catch { Directory.Move(temporary, tab.DirectoryPath); throw; }
-                }
-                else Directory.Move(tab.DirectoryPath, target);
-            }
+            DiskRename.Move(tab.DirectoryPath, target, isFolder: true,
+                Path.Combine(_basketsRoot, intent.TemporaryDirectoryName));
             _tabs[index] = tab with { DisplayName = name, DirectoryPath = target };
             _stateStore.Save(CreateState());
         }
@@ -317,7 +303,6 @@ public sealed class BasketWorkspace
         return true;
     }
 
-    /// <summary>Optionally confirms, recycles the basket folder, then removes the tab.</summary>
     public bool CloseTab(string uid)
     {
         if (_tabs.Count <= 1)
@@ -399,7 +384,6 @@ public sealed class BasketWorkspace
         return true;
     }
 
-    /// <summary>Moves one tab by <paramref name="offset"/> positions and reports the change.</summary>
     public bool MoveTab(string uid, int offset)
     {
         if (offset == 0)
@@ -422,9 +406,6 @@ public sealed class BasketWorkspace
         return true;
     }
 
-    // ---- Clipboard and adding materials ----------------------------------------------------
-
-    /// <summary>Handles Ctrl+V into a concrete folder of the active basket.</summary>
     public int AddFromClipboard(string? targetRelativeFolder)
     {
         PastePayload payload;
@@ -441,7 +422,6 @@ public sealed class BasketWorkspace
         return AddPayload(payload, targetRelativeFolder);
     }
 
-    /// <summary>Adds an already read clipboard payload to a folder of the active basket.</summary>
     private int AddPayload(PastePayload payload, string? targetRelativeFolder)
     {
         ArgumentNullException.ThrowIfNull(payload);
@@ -471,7 +451,6 @@ public sealed class BasketWorkspace
         }
     }
 
-    /// <summary>Handles files or folders dropped onto a concrete folder of the active basket.</summary>
     public int AddFiles(IReadOnlyList<string> paths, string? targetRelativeFolder)
     {
         var targetDirectory = ResolveTargetDirectory(targetRelativeFolder);
@@ -502,7 +481,7 @@ public sealed class BasketWorkspace
         {
             var fileName = MaterialNaming.DefaultFileName(
                 target.Path,
-                _formatter.FormatAsFileName(_clock.Now),
+                _formatter.Format(_clock.Now),
                 ".txt",
                 _text);
             var fullPath = Path.Combine(target.Path, fileName);
@@ -522,9 +501,6 @@ public sealed class BasketWorkspace
         }
     }
 
-    // ---- Folder operations -----------------------------------------------------------------
-
-    /// <summary>Creates a subfolder in a folder of the active basket; returns it when creation succeeded.</summary>
     public BasketEntry? CreateFolder(string? name, string? targetRelativeFolder, bool ensureUnique = false)
     {
         var tab = ActiveTab;
@@ -548,7 +524,7 @@ public sealed class BasketWorkspace
 
         try
         {
-            var freeName = ensureUnique ? FileTransfer.UniqueDirectoryName(parent.Path, cleaned, _text) : cleaned;
+            var freeName = ensureUnique ? MaterialNaming.UniqueDirectoryName(parent.Path, cleaned, _text) : cleaned;
             var fullPath = Path.Combine(parent.Path, freeName);
             if (Directory.Exists(fullPath) || File.Exists(fullPath))
             {
@@ -638,7 +614,7 @@ public sealed class BasketWorkspace
 
         try
         {
-            MoveOnDisk(sourcePath, targetPath, entry.IsFolder, caseOnlyRename);
+            DiskRename.Move(sourcePath, targetPath, entry.IsFolder);
         }
         catch (Exception ex)
         {
@@ -655,7 +631,6 @@ public sealed class BasketWorkspace
         return true;
     }
 
-    /// <summary>Confirms, then recycles one entry with everything inside it.</summary>
     public bool DeleteEntry(BasketEntry entry)
     {
         if (ActiveTab is null || entry.RelativePath.Length == 0)
@@ -703,7 +678,6 @@ public sealed class BasketWorkspace
         return true;
     }
 
-    /// <summary>Opens a file with its default application, or a folder in Windows Explorer.</summary>
     public void OpenEntry(BasketEntry entry)
     {
         if (entry.IsFolder)
@@ -774,7 +748,7 @@ public sealed class BasketWorkspace
             return;
         }
 
-        var directory = ResolveFolderPath(targetRelativeFolder);
+        var directory = ResolveFolder(targetRelativeFolder)?.Path;
         if (directory is null)
         {
             Fail(_text.Get("Error_InvalidFolderPath"));
@@ -784,7 +758,6 @@ public sealed class BasketWorkspace
         CopyFilesystemPath(directory, isFolder: true);
     }
 
-    /// <summary>Copies the full path of a file or folder.</summary>
     public void CopyEntryPath(BasketEntry entry) => CopyFilesystemPath(entry.FullPath, entry.IsFolder);
 
     /// <summary>Copies a literal recorded path, including a path whose target no longer exists.</summary>
@@ -826,7 +799,7 @@ public sealed class BasketWorkspace
                     _shell.CopyImageToClipboard(entry.FullPath);
                     break;
                 default:
-                    _shell.CopyFilesToClipboard([entry.FullPath], move: false);
+                    CopyFileSelection([entry.FullPath], move: false);
                     break;
             }
 
@@ -839,9 +812,6 @@ public sealed class BasketWorkspace
         }
     }
 
-    // ---- Moving entries --------------------------------------------------------------------
-
-    /// <summary>Moves several already resolved paths (a cut) into a folder.</summary>
     public int MoveFiles(IReadOnlyList<string> paths, string? targetRelativeFolder)
     {
         if (paths.Count == 0)
@@ -860,16 +830,12 @@ public sealed class BasketWorkspace
         return TransferFiles(paths, target, FileTransferIntent.Move);
     }
 
-    // ---- Refresh and state -----------------------------------------------------------------
-
-    /// <summary>Re-reads the baskets root, e.g. after an external agent changed it.</summary>
     public void Refresh()
     {
         if (AdoptFolders()) SaveStateQuietly();
         Publish(WorkspaceChangeKind.View);
     }
 
-    /// <summary>Publishes an informational status message (clipboard operations from the UI).</summary>
     public void ReportStatus(string message)
     {
         SetStatus(message);
@@ -1001,7 +967,6 @@ public sealed class BasketWorkspace
         {
             SetError(string.Join(Environment.NewLine, result.Problems.Take(6)));
         }
-        // Publish once, after status and partial failures are final.
         Commit();
         return result.Completed;
     }
@@ -1013,14 +978,19 @@ public sealed class BasketWorkspace
         try
         {
             string[] paths = [entry.FullPath];
-            _shell.CopyFilesToClipboard(paths, move);
-            _transfers.RememberClipboard(paths, move);
+            CopyFileSelection(paths, move);
             ReportStatus(_text.Format(move ? "Status_EntryCut" : "Status_EntryCopied", entry.Name));
         }
         catch (Exception ex)
         {
             Fail(_text.Format("Error_CopyToClipboard", ex.Message));
         }
+    }
+
+    private void CopyFileSelection(IReadOnlyList<string> paths, bool move)
+    {
+        _shell.CopyFilesToClipboard(paths, move);
+        _transfers.RememberClipboard(paths, move);
     }
 
     private int AddImage(byte[]? pngBytes, string targetDirectory)
@@ -1037,7 +1007,7 @@ public sealed class BasketWorkspace
             Directory.CreateDirectory(targetDirectory);
             var fileName = MaterialNaming.DefaultFileName(
                 targetDirectory,
-                _formatter.FormatAsFileName(_clock.Now),
+                _formatter.Format(_clock.Now),
                 ".png",
                 _text);
             File.WriteAllBytes(Path.Combine(targetDirectory, fileName), pngBytes);
@@ -1069,7 +1039,7 @@ public sealed class BasketWorkspace
             {
                 var urlFileName = MaterialNaming.DefaultFileName(
                     targetDirectory,
-                    _formatter.FormatAsFileName(_clock.Now),
+                    _formatter.Format(_clock.Now),
                     ".url",
                     _text);
                 File.WriteAllText(
@@ -1143,7 +1113,6 @@ public sealed class BasketWorkspace
         }
         catch (Exception)
         {
-            // Fall back to "now" below.
         }
 
         return _formatter.Format(_clock.Now);
@@ -1171,7 +1140,7 @@ public sealed class BasketWorkspace
             Uid = tab.Uid,
             DirectoryName = Path.GetFileName(tab.DirectoryPath),
             Name = tab.DisplayName,
-            SelectedFolder = _currentFolderOf(tab),
+            SelectedFolder = Navigation.FolderFor(tab.Uid),
         }).ToList(),
         PendingRename = pendingRename,
         RecentCopiedPaths = [.. _recentCopiedPaths],
@@ -1183,107 +1152,49 @@ public sealed class BasketWorkspace
         !string.IsNullOrWhiteSpace(name) && name is not "." and not ".." &&
         name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
-    /// <summary>Moves a file or folder to its new name; a case-only rename goes through a temporary name.</summary>
-    private static void MoveOnDisk(string sourcePath, string targetPath, bool isFolder, bool caseOnlyRename)
-    {
-        if (!caseOnlyRename)
-        {
-            if (isFolder)
-            {
-                Directory.Move(sourcePath, targetPath);
-            }
-            else
-            {
-                File.Move(sourcePath, targetPath);
-            }
-
-            return;
-        }
-
-        var temporaryPath = Path.Combine(Path.GetDirectoryName(sourcePath)!, $"~{Guid.NewGuid():N}.tmp");
-        if (isFolder)
-        {
-            Directory.Move(sourcePath, temporaryPath);
-            Directory.Move(temporaryPath, targetPath);
-        }
-        else
-        {
-            File.Move(sourcePath, temporaryPath);
-            File.Move(temporaryPath, targetPath);
-        }
-    }
-
     private TargetFolder? ResolveTargetDirectory(string? relativeFolder)
     {
-        var tab = ActiveTab;
-        if (tab is null)
-        {
-            return null;
-        }
-
-        var normalized = NormalizeRelativePath(relativeFolder);
-        if (normalized is null)
-        {
-            Fail(_text.Get("Error_InvalidFolderPath"));
-            return null;
-        }
-
-        var path = normalized.Length == 0 ? tab.DirectoryPath : Path.Combine(tab.DirectoryPath, normalized);
-        if (!Directory.Exists(path))
+        var target = ResolveRequestedFolder(relativeFolder);
+        if (target is null) return null;
+        if (!Directory.Exists(target.Path))
         {
             Fail(_text.Get("Error_FolderNotFoundMoved"));
             return null;
         }
-
-        return new TargetFolder(normalized, path);
+        return target;
     }
 
-    /// <summary>Resolves a target folder and creates it when missing, for writes that name their folder.</summary>
     private TargetFolder? ResolveWritableDirectory(string? relativeFolder)
     {
-        var tab = ActiveTab;
-        if (tab is null)
-        {
-            return null;
-        }
-
-        var normalized = NormalizeRelativePath(relativeFolder);
-        if (normalized is null)
-        {
-            Fail(_text.Get("Error_InvalidFolderPath"));
-            return null;
-        }
-
-        var path = normalized.Length == 0 ? tab.DirectoryPath : Path.Combine(tab.DirectoryPath, normalized);
+        var target = ResolveRequestedFolder(relativeFolder);
+        if (target is null) return null;
         try
         {
-            Directory.CreateDirectory(path);
+            Directory.CreateDirectory(target.Path);
+            return target;
         }
         catch (Exception ex)
         {
             Fail(_text.Format("Error_CreateFolder", ex.Message));
             return null;
         }
-
-        return new TargetFolder(normalized, path);
     }
 
-    /// <summary>Full path of a folder inside the active basket without touching the file system.</summary>
-    private string? ResolveFolderPath(string? relativeFolder)
+    private TargetFolder? ResolveRequestedFolder(string? relativeFolder)
+    {
+        var target = ResolveFolder(relativeFolder);
+        if (target is null && ActiveTab is not null)
+            Fail(_text.Get("Error_InvalidFolderPath"));
+        return target;
+    }
+
+    private TargetFolder? ResolveFolder(string? relativeFolder)
     {
         var tab = ActiveTab;
-        if (tab is null)
-        {
-            return null;
-        }
-
         var normalized = NormalizeRelativePath(relativeFolder);
-        if (normalized is null)
-        {
-            return null;
-        }
-
-        return normalized.Length == 0 ? tab.DirectoryPath : Path.Combine(tab.DirectoryPath, normalized);
+        return tab is null || normalized is null ? null
+            : new TargetFolder(normalized, normalized.Length == 0
+                ? tab.DirectoryPath : Path.Combine(tab.DirectoryPath, normalized));
     }
 
     private sealed record TargetFolder(string Folder, string Path);

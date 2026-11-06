@@ -1,26 +1,14 @@
-using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace PasteHatch.Core;
 
-/// <summary>
-/// JSON tab-state persistence. Reads tolerate a missing or corrupt file (the baskets on disk
-/// remain the source of truth); writes are atomic so a crash never leaves a half-written file.
-/// </summary>
 public sealed class TabStateStore : ITabStateStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
+    private readonly JsonFile<WorkspaceState> _file;
 
-    public TabStateStore(string stateFilePath) => StateFilePath = stateFilePath;
+    public TabStateStore(string stateFilePath)
+    {
+        StateFilePath = stateFilePath;
+        _file = new JsonFile<WorkspaceState>(stateFilePath);
+    }
 
     public static TabStateStore CreateDefault() => new(PasteHatchPaths.StateFile);
 
@@ -28,41 +16,16 @@ public sealed class TabStateStore : ITabStateStore
 
     public WorkspaceState Load()
     {
-        try
+        var state = _file.Load();
+        state.Tabs ??= [];
+        // Version 2/3 used the UID as its directory component; upgrades must not move files.
+        if (state.Version < 4)
         {
-            if (!File.Exists(StateFilePath))
-            {
-                return new WorkspaceState();
-            }
-
-            var json = File.ReadAllText(StateFilePath, Encoding.UTF8);
-            var state = JsonSerializer.Deserialize<WorkspaceState>(json, JsonOptions) ?? new WorkspaceState();
-            state.Tabs ??= [];
-            // Version 2/3 used the UID as its directory component. Upgrade only at the read boundary.
-            if (state.Version < 4)
-            {
-                foreach (var tab in state.Tabs) tab.DirectoryName = tab.Uid;
-            }
-            state.Version = WorkspaceState.CurrentVersion;
-            return state;
+            foreach (var tab in state.Tabs) tab.DirectoryName = tab.Uid;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
-        {
-            return new WorkspaceState();
-        }
+        state.Version = WorkspaceState.CurrentVersion;
+        return state;
     }
 
-    public void Save(WorkspaceState state)
-    {
-        var directory = Path.GetDirectoryName(StateFilePath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        var temporaryPath = StateFilePath + ".tmp";
-        var json = JsonSerializer.Serialize(state, JsonOptions);
-        File.WriteAllText(temporaryPath, json, Encoding.UTF8);
-        File.Move(temporaryPath, StateFilePath, overwrite: true);
-    }
+    public void Save(WorkspaceState state) => _file.Save(state);
 }

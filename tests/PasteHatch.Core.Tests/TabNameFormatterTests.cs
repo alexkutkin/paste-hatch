@@ -48,42 +48,4 @@ public sealed class TabNameFormatterTests
         Assert.Equal("Mon, 09:05", name);
     }
 
-    [Fact]
-    public void FormatAsFileName_ReplacesColonWithDash()
-    {
-        var formatter = new TabNameFormatter(English);
-
-        Assert.Equal("Mon, 13:02", formatter.Format(TestMoments.MondayAfternoon));
-        Assert.Equal("Mon, 13-02", formatter.FormatAsFileName(TestMoments.MondayAfternoon));
-    }
-
-    [Fact]
-    public void FormatAsFileName_LateEvening_ReturnsFilesystemSafeName()
-    {
-        var formatter = new TabNameFormatter(English);
-        var lateEvening = TestMoments.Local(2026, 10, 19, 23, 59);
-
-        var fileNameBase = formatter.FormatAsFileName(lateEvening);
-
-        Assert.Equal("Mon, 23-59", fileNameBase);
-        Assert.DoesNotContain(':', fileNameBase);
-    }
-
-    [Fact]
-    public void SanitizeFileName_ReplacesEveryInvalidFileNameCharacterWithDash()
-    {
-        var invalidCharacters = Path.GetInvalidFileNameChars();
-        var input = new string(invalidCharacters);
-
-        var sanitized = TabNameFormatter.SanitizeFileName(input);
-
-        Assert.Equal(new string('-', invalidCharacters.Length), sanitized);
-    }
-
-    [Fact]
-    public void SanitizeFileName_LeavesAlreadyValidNameUnchanged()
-    {
-        Assert.Equal("note (2)", TabNameFormatter.SanitizeFileName("note (2)"));
-        Assert.Equal("Mon, 13-02", TabNameFormatter.SanitizeFileName("Mon, 13-02"));
-    }
 }

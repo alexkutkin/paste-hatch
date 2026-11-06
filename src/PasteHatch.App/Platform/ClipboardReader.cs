@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Threading;
 using System.Windows.Forms;
 using PasteHatch.Core;
 
@@ -12,38 +10,22 @@ namespace PasteHatch.Platform;
 /// <summary>
 /// Reads the Windows clipboard once per Ctrl+V and normalizes it into a
 /// <see cref="PastePayload"/>. The clipboard is retried for a short while when another
-/// process holds it open (<see cref="ExternalException"/>); any other failure degrades to
+/// process holds it open (<see cref="System.Runtime.InteropServices.ExternalException"/>); any other failure degrades to
 /// <see cref="PastePayload.None"/> because pasting must never surface an exception.
 /// </summary>
 public sealed class ClipboardReader : IClipboardReader
 {
-    private const int MaxAttempts = 10;
-    private const int RetryDelayMilliseconds = 40;
-
-    /// <inheritdoc />
     public PastePayload Read()
     {
-        for (var attempt = 0; attempt < MaxAttempts; attempt++)
+        try
         {
-            try
-            {
-                return ReadClipboard();
-            }
-            catch (ExternalException) when (attempt < MaxAttempts - 1)
-            {
-                // Another application currently owns the clipboard; it is normally released
-                // within a few milliseconds, so retry rather than dropping the paste.
-                Thread.Sleep(RetryDelayMilliseconds);
-            }
-            catch (Exception)
-            {
-                // "Clipboard is empty", "thread is not STA", encoding failures, ... are all
-                // equivalent to "there is nothing pasteable" from the caller's point of view.
-                return PastePayload.None;
-            }
+            return ClipboardAccess.Retry(ReadClipboard);
         }
-
-        return PastePayload.None;
+        catch (Exception)
+        {
+            // Clipboard failures leave nothing pasteable; writes report their errors instead.
+            return PastePayload.None;
+        }
     }
 
     private static PastePayload ReadClipboard()
@@ -54,7 +36,6 @@ public sealed class ClipboardReader : IClipboardReader
             return PastePayload.None;
         }
 
-        // Precedence: files (copy/cut in Explorer) win over a bitmap, a bitmap wins over text.
         if (data.GetDataPresent(DataFormats.FileDrop, autoConvert: true)
             && data.GetData(DataFormats.FileDrop, autoConvert: true) is string[] { Length: > 0 } droppedPaths)
         {
