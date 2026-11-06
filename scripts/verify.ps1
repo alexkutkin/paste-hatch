@@ -332,9 +332,12 @@ try {
     Wait-For 'same basket watcher refresh retains the manually selected file' {
         $node = Find-Node 'Z-last.txt'
         $preview = Find-Control 'PreviewText'
-        $null -ne (Find-Node 'A-first.txt') -and $null -ne $node -and
-        $node.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected -and
-        $null -ne $preview -and $preview.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq 'manual selection content'
+        $selection = $null
+        $value = $null
+        $hasSelection = $null -ne $node -and $node.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)
+        $hasValue = $null -ne $preview -and $preview.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$value)
+        $null -ne (Find-Node 'A-first.txt') -and $hasSelection -and $selection.Current.IsSelected -and
+        $hasValue -and $value.Current.Value -eq 'manual selection content'
     }
     $otherBasketRow = (Find-Control 'BasketsList').FindAll([System.Windows.Automation.TreeScope]::Descendants,
         [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ListItem)) |
