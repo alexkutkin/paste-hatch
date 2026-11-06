@@ -16,6 +16,9 @@
 - Do not force-push or rewrite published history without explicit approval.
 
 ## Project
+- Agents may close a running PasteHatch instance without asking when needed for
+  builds, updates, or verification. Prefer normal application exit so state is saved;
+  force-stop only if normal exit fails.
 - **Build Release together with Debug.** After code changes run `scripts\build.ps1`
   (Release x64) alongside the Debug build: the desktop shortcut launches the Release
   build, so a Debug-only change stays invisible there.
