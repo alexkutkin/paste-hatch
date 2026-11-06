@@ -32,30 +32,6 @@ public sealed class TabNameFormatter
         return $"{capitalized}, {local.ToString("HH:mm", culture)}";
     }
 
-    /// <summary>
-    /// Default base name (without extension) for a note, pasted text or image. Colon is legal in
-    /// a Windows tab title but not in a file name (NTFS treats it as an alternate-data-stream
-    /// separator), so the file variant replaces every character forbidden by the filesystem:
-    /// "Пн, 13:02" becomes "Пн, 13-02".
-    /// </summary>
-    public string FormatAsFileName(DateTimeOffset moment) => SanitizeFileName(Format(moment));
-
-    /// <summary>Replaces characters that <see cref="Path.GetInvalidFileNameChars"/> forbids with '-'.</summary>
-    public static string SanitizeFileName(string value)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var characters = value.ToCharArray();
-        for (var i = 0; i < characters.Length; i++)
-        {
-            if (Array.IndexOf(invalid, characters[i]) >= 0)
-            {
-                characters[i] = '-';
-            }
-        }
-
-        return new string(characters);
-    }
-
     private static string Capitalize(string value)
     {
         if (string.IsNullOrEmpty(value))

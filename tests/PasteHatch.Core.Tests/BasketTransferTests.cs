@@ -71,4 +71,23 @@ public sealed class BasketTransferTests : IDisposable
         Assert.Equal((true, WorkspaceChangeKind.Contents), changes[0]);
         Assert.True(File.Exists(source));
     }
+
+    [Fact]
+    public void CopyFileContent_AfterCut_ReplacesMoveIntentWithCopy()
+    {
+        var workspace = _harness.CreateInitializedWorkspace();
+        var root = workspace.RequireActiveTab().DirectoryPath;
+        var source = Path.Combine(root, "archive.zip");
+        File.WriteAllText(source, "payload");
+        Directory.CreateDirectory(Path.Combine(root, "dest"));
+        var entry = Assert.Single(workspace.GetEntries(""), item => !item.IsFolder);
+        workspace.CopyEntryToClipboard(entry, move: true);
+        workspace.CopyEntryContent(entry);
+        _harness.Clipboard.Payload = PastePayload.FromFiles([source]);
+
+        Assert.Equal(1, workspace.AddFromClipboard("dest"));
+
+        FileAssert.HasText(source, "payload");
+        FileAssert.HasText(Path.Combine(root, "dest", "archive.zip"), "payload");
+    }
 }

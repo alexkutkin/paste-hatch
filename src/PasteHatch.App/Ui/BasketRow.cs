@@ -5,20 +5,16 @@ using PasteHatch.Core;
 
 namespace PasteHatch.Ui;
 
-/// <summary>One row of the vertical basket rail.</summary>
 public sealed class BasketRow : INotifyPropertyChanged
 {
     private bool _isEditing;
     private string _editText;
-    private bool _isActive;
-    private bool _canClose;
 
-    public BasketRow(BasketTab tab, bool isActive, bool canClose)
+    public BasketRow(BasketTab tab, bool canClose)
     {
         Tab = tab;
         _editText = tab.DisplayName;
-        _isActive = isActive;
-        _canClose = canClose;
+        CanClose = canClose;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -29,38 +25,9 @@ public sealed class BasketRow : INotifyPropertyChanged
 
     public string Name => Tab.DisplayName;
 
-    public bool IsActive
-    {
-        get => _isActive;
-        set
-        {
-            if (_isActive == value)
-            {
-                return;
-            }
+    public bool CanClose { get; }
 
-            _isActive = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public bool CanClose
-    {
-        get => _canClose;
-        set
-        {
-            if (_canClose == value)
-            {
-                return;
-            }
-
-            _canClose = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(CloseVisibility));
-        }
-    }
-
-    public Visibility CloseVisibility => _canClose ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility CloseVisibility => CanClose ? Visibility.Visible : Visibility.Collapsed;
 
     public bool IsEditing
     {

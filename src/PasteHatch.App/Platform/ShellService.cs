@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Threading;
 using System.Windows.Forms;
 using Microsoft.VisualBasic.FileIO;
 using PasteHatch.Core;
@@ -18,17 +16,12 @@ namespace PasteHatch.Platform;
 /// </summary>
 public sealed class ShellService : IShellService
 {
-    private const int ClipboardRetryAttempts = 10;
-    private const int ClipboardRetryDelayMilliseconds = 40;
-
-    /// <inheritdoc />
     public void OpenItem(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         using var process = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
     }
 
-    /// <inheritdoc />
     public void OpenFolder(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -40,7 +33,6 @@ public sealed class ShellService : IShellService
         using var process = Process.Start(startInfo);
     }
 
-    /// <inheritdoc />
     public void RecycleFile(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -50,34 +42,19 @@ public sealed class ShellService : IShellService
         FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
     }
 
-    /// <inheritdoc />
     public void RecycleDirectory(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
     }
 
-    /// <inheritdoc />
     public void CopyText(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        for (var attempt = 0; ; attempt++)
-        {
-            try
-            {
-                Clipboard.SetText(text);
-                return;
-            }
-            catch (ExternalException) when (attempt < ClipboardRetryAttempts - 1)
-            {
-                // Another application owns the clipboard for a moment; retry, then surface the error.
-                Thread.Sleep(ClipboardRetryDelayMilliseconds);
-            }
-        }
+        ClipboardAccess.Retry(() => Clipboard.SetText(text));
     }
 
-    /// <inheritdoc />
     public void CopyImageToClipboard(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -94,10 +71,9 @@ public sealed class ShellService : IShellService
         var data = new DataObject();
         data.SetData(DataFormats.Bitmap, true, bitmap);
         data.SetData("PNG", false, new MemoryStream(png.ToArray()));
-        SetClipboardData(data);
+        ClipboardAccess.Retry(() => Clipboard.SetDataObject(data, copy: true));
     }
 
-    /// <inheritdoc />
     public void CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)
     {
         ArgumentNullException.ThrowIfNull(paths);
@@ -112,22 +88,6 @@ public sealed class ShellService : IShellService
         // Preferred DropEffect is what Explorer reads to decide between copy and cut.
         var effect = new MemoryStream(BitConverter.GetBytes(move ? 2u : 1u));
         data.SetData("Preferred DropEffect", effect);
-        SetClipboardData(data);
-    }
-
-    private static void SetClipboardData(DataObject data)
-    {
-        for (var attempt = 0; ; attempt++)
-        {
-            try
-            {
-                Clipboard.SetDataObject(data, copy: true);
-                return;
-            }
-            catch (ExternalException) when (attempt < ClipboardRetryAttempts - 1)
-            {
-                Thread.Sleep(ClipboardRetryDelayMilliseconds);
-            }
-        }
+        ClipboardAccess.Retry(() => Clipboard.SetDataObject(data, copy: true));
     }
 }

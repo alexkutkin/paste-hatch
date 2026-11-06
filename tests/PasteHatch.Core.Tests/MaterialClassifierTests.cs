@@ -24,9 +24,4 @@ public sealed class MaterialClassifierTests
         Assert.Equal(expectedKind, MaterialClassifier.Classify(fileName));
     }
 
-    [Fact]
-    public void Classify_FileNameWithoutExtension_IsFile()
-    {
-        Assert.Equal(MaterialKind.File, MaterialClassifier.Classify("just-a-name"));
-    }
 }

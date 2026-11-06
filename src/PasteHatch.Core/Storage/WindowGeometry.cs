@@ -13,14 +13,12 @@ public sealed class WindowGeometry
     /// <summary>Preferred preview width in device-independent pixels, or null when none was saved.</summary>
     public double? PreviewWidth { get; private set; }
 
-    /// <summary>Restores saved values; an unusable one is treated as never saved.</summary>
     public void Restore(WindowPlacementState? placement, double? previewWidth)
     {
         Placement = IsUsablePlacement(placement) ? placement : null;
         PreviewWidth = IsUsablePreviewWidth(previewWidth) ? previewWidth : null;
     }
 
-    /// <summary>Records a completed move or resize; returns true when the value changed.</summary>
     public bool Save(WindowPlacementState? placement)
     {
         if (!IsUsablePlacement(placement))
@@ -32,7 +30,6 @@ public sealed class WindowGeometry
         return true;
     }
 
-    /// <summary>Records a completed preview resize; returns true when the value changed.</summary>
     public bool SavePreviewWidth(double width)
     {
         if (!IsUsablePreviewWidth(width) || PreviewWidth == width)

@@ -10,41 +10,45 @@ public static class MaterialNaming
 {
     public const int MaxBaseNameLength = 160;
 
-    /// <summary>Returns a file name that does not exist yet in <paramref name="directory"/>.</summary>
     public static string UniqueFileName(string directory, string desiredFileName, ITextProvider text)
     {
-        var extension = Path.GetExtension(desiredFileName);
-        var baseName = Path.GetFileNameWithoutExtension(desiredFileName);
+        var stem = Path.GetFileNameWithoutExtension(desiredFileName);
+        if (string.IsNullOrEmpty(stem)) stem = text.Get("Name_DefaultMaterial");
+        return UniqueName(directory, desiredFileName, stem, Path.GetExtension(desiredFileName),
+            "Error_UniqueFileName", text);
+    }
 
-        if (string.IsNullOrEmpty(baseName))
+    public static string UniqueDirectoryName(string directory, string desiredName, ITextProvider text)
+        => UniqueName(directory, desiredName, desiredName, string.Empty, "Error_UniqueFolderName", text);
+
+    private static string UniqueName(string directory, string desiredName, string stem, string extension,
+        string errorKey, ITextProvider text)
+    {
+        var candidate = desiredName;
+        for (var counter = 2; File.Exists(Path.Combine(directory, candidate)) ||
+            Directory.Exists(Path.Combine(directory, candidate)); counter++)
         {
-            baseName = text.Get("Name_DefaultMaterial");
+            if (counter > 9999) throw new IOException(text.Format(errorKey, desiredName));
+            candidate = $"{stem} ({counter}){extension}";
         }
-
-        var candidate = desiredFileName;
-        var counter = 2;
-
-        while (File.Exists(Path.Combine(directory, candidate)) ||
-               Directory.Exists(Path.Combine(directory, candidate)))
-        {
-            candidate = $"{baseName} ({counter}){extension}";
-            counter++;
-
-            if (counter > 9999)
-            {
-                throw new IOException(text.Format("Error_UniqueFileName", desiredFileName));
-            }
-        }
-
         return candidate;
+    }
+
+    public static string SanitizeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var characters = value.ToCharArray();
+        for (var i = 0; i < characters.Length; i++)
+        {
+            if (Array.IndexOf(invalid, characters[i]) >= 0) characters[i] = '-';
+        }
+        return new string(characters);
     }
 
     public static string DefaultFileName(string directory, string format, string extension, ITextProvider text)
     {
-        // Defence in depth: callers normally pass TabNameFormatter.FormatAsFileName, but a colon
-        // anywhere in the desired name would silently create an NTFS alternate data stream
-        // instead of a file, so the base is sanitized for the filesystem here as well.
-        var desired = $"{TabNameFormatter.SanitizeFileName(format)}{extension}";
+        // A colon in a Windows display name would create an NTFS alternate data stream.
+        var desired = $"{SanitizeFileName(format)}{extension}";
         return UniqueFileName(directory, desired, text);
     }
 
@@ -52,7 +56,7 @@ public static class MaterialNaming
     public static string PastedTextFileName(string directory, string content, ITextProvider text)
     {
         var words = content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Take(5);
-        var baseName = TabNameFormatter.SanitizeFileName(string.Join('_', words));
+        var baseName = SanitizeFileName(string.Join('_', words));
         baseName = baseName[..Math.Min(baseName.Length, MaxBaseNameLength)].TrimEnd(' ', '.');
         if (baseName.Length > 0 && char.IsHighSurrogate(baseName[^1]))
         {
@@ -110,7 +114,7 @@ public static class MaterialNaming
 
     /// <summary>Serialized Windows Internet Shortcut (.url) contents for a link.</summary>
     public static string CreateInternetShortcutContent(Uri link)
-        => $"[InternetShortcut]{AuxiliaryLineBreak}URL={link.OriginalString}{AuxiliaryLineBreak}";
+        => $"[InternetShortcut]\r\nURL={link.OriginalString}\r\n";
 
     /// <summary>
     /// Validates the editable part of a file name (extension excluded) before a rename.
@@ -191,8 +195,6 @@ public static class MaterialNaming
             _ => false,
         };
     }
-
-    private static readonly string AuxiliaryLineBreak = "\r\n";
 
     public static Encoding Utf8NoBom { get; } = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 }

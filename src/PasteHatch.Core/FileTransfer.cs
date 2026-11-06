@@ -63,7 +63,7 @@ internal sealed class FileTransfer(IShellService shell, ITextProvider text)
                 var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                 if (name.Length == 0) throw new IOException(text.Get("Error_DriveRoot"));
                 var destination = Path.Combine(target, isFolder
-                    ? UniqueDirectoryName(target, name, text)
+                    ? MaterialNaming.UniqueDirectoryName(target, name, text)
                     : MaterialNaming.UniqueFileName(target, name, text));
                 if (isFolder)
                 {
@@ -127,17 +127,6 @@ internal sealed class FileTransfer(IShellService shell, ITextProvider text)
         var candidate = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return string.Equals(candidate, root, StringComparison.OrdinalIgnoreCase) ||
             candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-    }
-
-    internal static string UniqueDirectoryName(string directory, string desiredName, ITextProvider text)
-    {
-        var candidate = desiredName;
-        for (var counter = 2; Directory.Exists(Path.Combine(directory, candidate)) || File.Exists(Path.Combine(directory, candidate)); counter++)
-        {
-            if (counter > 9999) throw new IOException(text.Format("Error_UniqueFolderName", desiredName));
-            candidate = $"{desiredName} ({counter})";
-        }
-        return candidate;
     }
 
     private static void CopyDirectory(string source, string destination)

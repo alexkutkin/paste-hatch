@@ -77,10 +77,13 @@ Responsibility boundaries:
 
 - **File transfer** is concentrated in `FileTransfer`: import, explicit copy and move share
   path checks, collision handling and partial-success handling. `BasketWorkspace` publishes
-  the final result and holds the copy/cut intent; the window passes user actions through.
-- **Tree state** is held by `BasketTreeNavigation`: selection and expanded folders belong to
+  the final result and records copy/cut intent together with each file-clipboard write; the window
+  passes user actions through. `MaterialNaming` owns filename safety and collision allocation for
+  both files and folders.
+- **Tree state** is held by the workspace-owned `BasketTreeNavigation`: selection and expanded folders belong to
   the basket UID, and the current folder is derived from the selection (a selected folder is
-  current, a selected file's parent is current), so no other module keeps a copy of it.
+  current, a selected file's parent is current), so no other module keeps a copy of it. Persistence reads navigation directly; constructing a
+  workspace needs no callback through the window.
   Operations receive the folder explicitly and the state file records it. A vanished selected
   path falls back to the nearest existing parent. Switching baskets selects the first root
   entry in the existing sort order; initial startup retains saved-folder restoration and
@@ -115,3 +118,20 @@ Responsibility boundaries:
 The diagrams separate external context from internal duties, as C4 recommends for the
 overview level; deeper levels are added when they help answer a specific architecture
 question. See [C4: diagram types](https://c4model.com/diagrams).
+
+## Implementation map
+
+`MainWindow.xaml.cs` composes the application and coordinates view refreshes. Its partial files
+keep basket rail, tree, preview, commands, drag/drop, layout and settings state beside their
+handlers. They remain one WinUI window rather than pass-through controller layers.
+
+`JsonFile<T>` owns forgiving JSON reads and atomic replacement for both metadata stores.
+`TabStateStore` retains schema migration. `DiskRename` owns case-only disk moves and rollback;
+basket durable rename intent and startup recovery remain in the workspace.
+`ClipboardAccess` owns the Windows contention retry policy; readers retain an empty-payload
+fallback and writers propagate failures. External drops check that their captured basket is
+still active after asynchronous clipboard retrieval.
+
+Build, run, shortcut and verification scripts obtain the executable location through
+`project-output.ps1`, which asks MSBuild for evaluated output properties. Test locale resources
+are copied from the application sources into test output, including external artifacts folders.

@@ -14,9 +14,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$root = Split-Path -Parent $PSScriptRoot
-$runtime = if ($Platform -eq 'x64') { 'win-x64' } else { 'win-arm64' }
-$exe = Join-Path $root "src\PasteHatch.App\bin\$Platform\$Configuration\net10.0-windows10.0.19041.0\$runtime\PasteHatch.exe"
+. (Join-Path $PSScriptRoot 'project-output.ps1')
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shortcutPath = Join-Path $desktop 'PasteHatch.lnk'
 
@@ -31,6 +29,7 @@ if ($Uninstall) {
     exit 0
 }
 
+$exe = Get-PasteHatchExecutable -Configuration $Configuration -Platform $Platform
 if (-not (Test-Path $exe)) {
     throw "Executable not found: $exe. Run scripts\build.ps1 first."
 }

@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'project-output.ps1')
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'src\PasteHatch.App\PasteHatch.App.csproj'
 
@@ -20,12 +21,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    $runtime = if ($Platform -eq 'x64') { 'win-x64' } else { 'win-arm64' }
-    $exe = if ($ArtifactsPath) {
-        Join-Path $ArtifactsPath "bin\PasteHatch.App\$($Configuration.ToLowerInvariant())_$runtime\PasteHatch.exe"
-    } else {
-        Join-Path $root "src\PasteHatch.App\bin\$Platform\$Configuration\net10.0-windows10.0.19041.0\$runtime\PasteHatch.exe"
-    }
+    $exe = Get-PasteHatchExecutable -Configuration $Configuration -Platform $Platform -ArtifactsPath $ArtifactsPath
     Write-Host ""
     Write-Host "Built: $exe"
     Write-Host "Run:   powershell -ExecutionPolicy Bypass -File scripts\run.ps1"

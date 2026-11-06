@@ -9,8 +9,6 @@ namespace PasteHatch.Core.Tests;
 /// </summary>
 internal sealed class WorkspaceHarness : IDisposable
 {
-    private readonly List<BasketWorkspace> _workspaces = [];
-    private readonly Dictionary<BasketWorkspace, BasketTreeNavigation> _treeStates = new();
 
     public WorkspaceHarness()
     {
@@ -35,8 +33,7 @@ internal sealed class WorkspaceHarness : IDisposable
     /// <summary>Creates a workspace without calling <see cref="BasketWorkspace.Initialize"/>.</summary>
     public BasketWorkspace CreateWorkspace()
     {
-        BasketWorkspace? workspace = null;
-        workspace = new BasketWorkspace(
+        var workspace = new BasketWorkspace(
             Temp.BasketsRoot,
             Store,
             Clipboard,
@@ -44,22 +41,8 @@ internal sealed class WorkspaceHarness : IDisposable
             Confirmations,
             Clock,
             new TabNameFormatter(Text.Culture),
-            Text,
-            currentFolderOf: tab => TreeStateFor(workspace!).FolderFor(tab.Uid));
-        _workspaces.Add(workspace);
+            Text);
         return workspace;
-    }
-
-    /// <summary>Tree state of a workspace, created on demand and wired as its folder source.</summary>
-    public BasketTreeNavigation TreeStateFor(BasketWorkspace workspace)
-    {
-        if (!_treeStates.TryGetValue(workspace, out var treeState))
-        {
-            treeState = new BasketTreeNavigation(workspace);
-            _treeStates[workspace] = treeState;
-        }
-
-        return treeState;
     }
 
     public BasketWorkspace CreateInitializedWorkspace()

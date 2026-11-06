@@ -8,10 +8,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'project-output.ps1')
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'src\PasteHatch.App\PasteHatch.App.csproj'
-$runtime = if ($Platform -eq 'x64') { 'win-x64' } else { 'win-arm64' }
-$exe = Join-Path $root "src\PasteHatch.App\bin\$Platform\$Configuration\net10.0-windows10.0.19041.0\$runtime\PasteHatch.exe"
 
 Push-Location $root
 try {
@@ -22,6 +21,7 @@ try {
         }
     }
 
+    $exe = Get-PasteHatchExecutable -Configuration $Configuration -Platform $Platform
     if (-not (Test-Path $exe)) {
         throw "Executable not found: $exe (run scripts\build.ps1 first)"
     }

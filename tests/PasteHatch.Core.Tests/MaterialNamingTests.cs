@@ -325,4 +325,28 @@ public sealed class MaterialNamingTests : IDisposable
             content);
         Assert.DoesNotContain("\uFEFF", content, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("folder/name", "folder-name")]
+    [InlineData("note\0name", "note-name")]
+    public void SanitizeFileName_ReplacesInvalidCharacters(string input, string expected)
+    {
+        Assert.Equal(expected, MaterialNaming.SanitizeFileName(input));
+    }
+
+    [Fact]
+    public void SanitizeFileName_LeavesAlreadyValidNameUnchanged()
+    {
+        Assert.Equal("note (2)", MaterialNaming.SanitizeFileName("note (2)"));
+        Assert.Equal("Mon, 13-02", MaterialNaming.SanitizeFileName("Mon, 13-02"));
+    }
+
+    [Fact]
+    public void UniqueDirectoryName_DotsStayInFolderNameAndFilesAlsoReserveNames()
+    {
+        Directory.CreateDirectory(Path.Combine(_temp.Root, "archive.tar"));
+        File.WriteAllText(Path.Combine(_temp.Root, "archive.tar (2)"), "reserved");
+
+        Assert.Equal("archive.tar (3)", MaterialNaming.UniqueDirectoryName(_temp.Root, "archive.tar", Text));
+    }
 }

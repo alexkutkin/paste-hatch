@@ -39,7 +39,7 @@ internal sealed class ReswTextProvider : ITextProvider
 
     private static ReswTextProvider Load(string language)
     {
-        var path = Path.Combine(FindAppDirectory(), "Strings", language, "Resources.resw");
+        var path = Path.Combine(AppContext.BaseDirectory, "Strings", language, "Resources.resw");
         var values = XDocument.Load(path).Root!
             .Elements("data")
             .ToDictionary(
@@ -49,20 +49,4 @@ internal sealed class ReswTextProvider : ITextProvider
         return new ReswTextProvider(values, CultureInfo.GetCultureInfo(language));
     }
 
-    private static string FindAppDirectory()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
-             directory is not null;
-             directory = directory.Parent)
-        {
-            var candidate = Path.Combine(directory.FullName, "src", "PasteHatch.App");
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new DirectoryNotFoundException(
-            $"Could not find src/PasteHatch.App above {AppContext.BaseDirectory}.");
-    }
 }
