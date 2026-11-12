@@ -23,6 +23,8 @@ public sealed class TabStateStore : ITabStateStore
         {
             foreach (var tab in state.Tabs) tab.DirectoryName = tab.Uid;
         }
+        if (state.PendingRename is { SourceDirectoryName: null } pending)
+            pending.SourceDirectoryName = state.Tabs.FirstOrDefault(tab => tab.Uid == pending.Uid)?.DirectoryName;
         state.Version = WorkspaceState.CurrentVersion;
         return state;
     }

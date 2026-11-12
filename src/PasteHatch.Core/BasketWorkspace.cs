@@ -36,11 +36,16 @@ public sealed class BasketWorkspace
     private readonly TabNameFormatter _formatter;
     private readonly ITextProvider _text;
     private readonly FileTransfer _transfers;
+    private LocalClipboardTransfer? _clipboardTransfer;
+
+    private enum LocalClipboardMode { Copy, CutPending, CutConsumed, CutUncertain }
+    private sealed record LocalClipboardTransfer(Guid Token, LocalClipboardMode Mode);
 
     private readonly List<BasketTab> _tabs = [];
     private readonly List<string> _recentCopiedPaths = [];
     private readonly Dictionary<string, string> _savedFolders = new(StringComparer.Ordinal);
     private string? _activeUid;
+    private BasketRenameState? _pendingRename;
 
     public BasketWorkspace(
         string basketsRoot,
@@ -58,7 +63,7 @@ public sealed class BasketWorkspace
         _clipboard = clipboard;
         _shell = shell;
         _text = text ?? KeyTextProvider.Instance;
-        _transfers = new FileTransfer(shell, _text);
+        _transfers = new FileTransfer(basketsRoot, shell, _text);
         _confirmations = confirmations;
         _confirmBasketDeletion = confirmBasketDeletion ?? (() => true);
         _clock = clock ?? SystemClock.Instance;
@@ -68,7 +73,10 @@ public sealed class BasketWorkspace
 
     public event EventHandler<WorkspaceChange>? Changed;
 
-    public IReadOnlyList<BasketTab> Tabs => _tabs;
+    public IReadOnlyList<BasketTab> Tabs => IsInitialized ? _tabs : [];
+
+    /// <summary>True after the saved model has loaded completely and can safely be written.</summary>
+    public bool IsInitialized { get; private set; }
 
     /// <summary>The five latest successful filesystem-path copy events, newest first.</summary>
     public IReadOnlyList<string> RecentCopiedPaths => _recentCopiedPaths.AsReadOnly();
@@ -80,7 +88,8 @@ public sealed class BasketWorkspace
     /// <summary>Window geometry recorded in the state file; the window owns its values.</summary>
     public WindowGeometry Geometry { get; } = new();
 
-    public BasketTab? ActiveTab => _tabs.Find(tab => tab.Uid == _activeUid) ?? _tabs.FirstOrDefault();
+    public BasketTab? ActiveTab => IsInitialized
+        ? _tabs.Find(tab => tab.Uid == _activeUid) ?? _tabs.FirstOrDefault() : null;
 
     /// <summary>
     /// Entries of any folder in the active basket. Folders come first, then files, both in
@@ -171,9 +180,9 @@ public sealed class BasketWorkspace
     /// </summary>
     internal string SavedFolderFor(string uid) => _savedFolders.GetValueOrDefault(uid, string.Empty);
 
-    public bool CanCreateTab => _tabs.Count < MaxTabs;
+    public bool CanCreateTab => IsInitialized && _tabs.Count < MaxTabs;
 
-    public bool CanCloseTab => _tabs.Count > 1;
+    public bool CanCloseTab => IsInitialized && _tabs.Count > 1;
 
     /// <summary>Last user-facing message (copy result, rejected paste, save failure).</summary>
     public string? StatusMessage { get; private set; }
@@ -183,9 +192,11 @@ public sealed class BasketWorkspace
 
     public void Initialize()
     {
+        IsInitialized = false;
         Directory.CreateDirectory(_basketsRoot);
 
         var state = _stateStore.Load();
+        _pendingRename = state.PendingRename;
         _recentCopiedPaths.Clear();
         _recentCopiedPaths.AddRange((state.RecentCopiedPaths ?? []).Take(5));
         Geometry.Restore(state.Window, state.PreviewWidth);
@@ -201,12 +212,18 @@ public sealed class BasketWorkspace
         }
 
         _activeUid = _tabs.Any(tab => tab.Uid == state.ActiveUid) ? state.ActiveUid : _tabs[0].Uid;
+        IsInitialized = true;
         SaveStateQuietly();
         Publish(WorkspaceChangeKind.View);
     }
 
     public BasketTab? CreateTab()
     {
+        if (!IsInitialized)
+        {
+            Fail(_text.Get("Error_WorkspaceNotReady"));
+            return null;
+        }
         if (_tabs.Count >= MaxTabs)
         {
             SetStatus(_text.Get("Status_BasketLimit"));
@@ -232,6 +249,7 @@ public sealed class BasketWorkspace
 
     public bool ActivateTab(string uid)
     {
+        if (!IsInitialized) return false;
         if (!_tabs.Any(tab => tab.Uid == uid))
         {
             return false;
@@ -249,10 +267,20 @@ public sealed class BasketWorkspace
 
     public bool RenameTab(string uid, string? newName)
     {
+        if (!IsInitialized) return false;
         var index = _tabs.FindIndex(tab => tab.Uid == uid);
         if (index < 0) return false;
         var name = NormalizeDisplayName(newName);
         if (name is null) return false;
+        if (_pendingRename is not null)
+        {
+            SaveStateQuietly();
+            if (_pendingRename is not null)
+            {
+                Fail(_text.Get("Error_RenameRecoveryPending"));
+                return false;
+            }
+        }
         var directoryName = Regex.Replace(name, @"\s+", "_");
         var validated = MaterialNaming.ValidateFolderName(directoryName, _text, out var error);
         if (validated is null)
@@ -262,40 +290,41 @@ public sealed class BasketWorkspace
         }
         var tab = _tabs[index];
         var target = Path.Combine(_basketsRoot, validated);
-        var samePath = string.Equals(tab.DirectoryPath, target, StringComparison.Ordinal);
+        if (string.Equals(name, tab.DisplayName, StringComparison.Ordinal) &&
+            string.Equals(tab.DirectoryPath, target, StringComparison.Ordinal)) return true;
         var caseOnly = string.Equals(tab.DirectoryPath, target, StringComparison.OrdinalIgnoreCase);
         if (!caseOnly && (Directory.Exists(target) || File.Exists(target)))
         {
             Fail(_text.Format("Error_FolderExists", validated));
             return false;
         }
+        if (string.Equals(tab.DirectoryPath, target, StringComparison.Ordinal))
+        {
+            _tabs[index] = tab with { DisplayName = name };
+            var saved = SaveStateQuietly();
+            Publish(WorkspaceChangeKind.View);
+            return saved;
+        }
         var intent = new BasketRenameState
         {
-            Uid = uid, DirectoryName = validated, Name = name,
-            TemporaryDirectoryName = $"~{Guid.NewGuid():N}.tmp",
+            Uid = uid, SourceDirectoryName = Path.GetFileName(tab.DirectoryPath), DirectoryName = validated, Name = name,
         };
+        _pendingRename = intent;
+        var moved = false;
         try
         {
             // Persist the intent before touching disk. A failed write leaves the old basket intact.
-            _stateStore.Save(CreateState(intent));
-            DiskRename.Move(tab.DirectoryPath, target, isFolder: true,
-                Path.Combine(_basketsRoot, intent.TemporaryDirectoryName));
-            _tabs[index] = tab with { DisplayName = name, DirectoryPath = target };
             _stateStore.Save(CreateState());
+            Directory.Move(tab.DirectoryPath, target);
+            moved = true;
+            _tabs[index] = tab with { DisplayName = name, DirectoryPath = target };
+            _stateStore.Save(CreateState(completeRename: true));
+            _pendingRename = null;
         }
         catch (Exception ex)
         {
-            var temporary = Path.Combine(_basketsRoot, intent.TemporaryDirectoryName);
-            if (caseOnly && !samePath && Directory.Exists(temporary))
-            {
-                // A denied target move and rollback can leave the basket under its temporary
-                // name. Keep that directory associated with its UID before refresh or saving.
-                _tabs[index] = tab with { DirectoryPath = temporary };
-                // If this write fails, the durable intent still identifies the temporary folder.
-                SaveStateQuietly();
-            }
-            Fail(_text.Format("Error_RenameFolder", ex.Message));
-            Publish(WorkspaceChangeKind.Contents);
+            Fail(_text.Format(moved ? "Error_RenameAppliedStatePending" : "Error_RenameFolder", ex.Message),
+                moved ? WorkspaceChangeKind.Contents : WorkspaceChangeKind.Status);
             return false;
         }
         SetStatus(_text.Format("Status_FolderRenamed", tab.DisplayName, name));
@@ -305,6 +334,7 @@ public sealed class BasketWorkspace
 
     public bool CloseTab(string uid)
     {
+        if (!IsInitialized) return false;
         if (_tabs.Count <= 1)
         {
             SetStatus(_text.Get("Status_LastBasket"));
@@ -319,6 +349,16 @@ public sealed class BasketWorkspace
         }
 
         var tab = _tabs[index];
+        if (_pendingRename?.Uid == uid)
+        {
+            SaveStateQuietly();
+            if (_pendingRename?.Uid == uid)
+            {
+                Fail(_text.Get("Error_RenameRecoveryPending"));
+                return false;
+            }
+            tab = _tabs[index];
+        }
         if (_confirmBasketDeletion() && !_confirmations.ConfirmRecycleBasket(tab.DisplayName, tab.DirectoryPath))
         {
             return false;
@@ -353,6 +393,7 @@ public sealed class BasketWorkspace
     /// </summary>
     public bool ReorderTabs(IReadOnlyList<string> orderedUids)
     {
+        if (!IsInitialized) return false;
         if (orderedUids is null || orderedUids.Count == 0)
         {
             return false;
@@ -386,6 +427,7 @@ public sealed class BasketWorkspace
 
     public bool MoveTab(string uid, int offset)
     {
+        if (!IsInitialized) return false;
         if (offset == 0)
         {
             return false;
@@ -425,7 +467,20 @@ public sealed class BasketWorkspace
     private int AddPayload(PastePayload payload, string? targetRelativeFolder)
     {
         ArgumentNullException.ThrowIfNull(payload);
-        if (payload.Kind != PasteContentKind.Files) _transfers.ForgetClipboard();
+        var localTransfer = payload.Kind == PasteContentKind.Files &&
+            _clipboardTransfer?.Token == payload.LocalTransferToken ? _clipboardTransfer : null;
+        if (localTransfer is null) _clipboardTransfer = null;
+
+        if (localTransfer?.Mode == LocalClipboardMode.CutConsumed)
+        {
+            ReportStatus(_text.Get("Status_CutAlreadyPasted"));
+            return 0;
+        }
+        if (localTransfer?.Mode == LocalClipboardMode.CutUncertain)
+        {
+            Fail(_text.Get("Error_CutOutcomeUnknown"));
+            return 0;
+        }
 
         var targetDirectory = ResolveTargetDirectory(targetRelativeFolder);
         if (ActiveTab is null || targetDirectory is null)
@@ -436,7 +491,13 @@ public sealed class BasketWorkspace
         switch (payload.Kind)
         {
             case PasteContentKind.Files:
-                return TransferFiles(payload.Files, targetDirectory, _transfers.ClipboardIntent(payload.Files));
+                var intent = localTransfer?.Mode switch
+                {
+                    LocalClipboardMode.Copy => FileTransferIntent.Copy,
+                    LocalClipboardMode.CutPending => FileTransferIntent.Move,
+                    _ => FileTransferIntent.Import,
+                };
+                return TransferFiles(payload.Files, targetDirectory, intent, localTransfer);
 
             case PasteContentKind.Image:
                 return AddImage(payload.ImagePng, targetDirectory.Path);
@@ -549,7 +610,7 @@ public sealed class BasketWorkspace
     /// <summary>
     /// Renames a file or a folder without touching its contents. Kind rules stay inside: a material
     /// keeps its extension, a folder gets a folder name, a collision is refused, and a case-only
-    /// rename goes through a temporary name. Renaming a nested folder changes the paths of its
+    /// rename changes the exact disk casing directly. Renaming a nested folder changes the paths of its
     /// contents; renaming a basket is <see cref="RenameTab"/> and also renames its root folder.
     /// </summary>
     public bool RenameEntry(BasketEntry entry, string? newBaseName)
@@ -614,7 +675,8 @@ public sealed class BasketWorkspace
 
         try
         {
-            DiskRename.Move(sourcePath, targetPath, entry.IsFolder);
+            if (entry.IsFolder) Directory.Move(sourcePath, targetPath);
+            else File.Move(sourcePath, targetPath);
         }
         catch (Exception ex)
         {
@@ -766,6 +828,7 @@ public sealed class BasketWorkspace
         try
         {
             _shell.CopyText(path);
+            _clipboardTransfer = null;
             _recentCopiedPaths.Insert(0, path);
             if (_recentCopiedPaths.Count > 5) _recentCopiedPaths.RemoveAt(5);
             SetStatus(_text.Get(isFolder ? "Status_FolderPathCopied" : "Status_FilePathCopied"));
@@ -791,12 +854,15 @@ public sealed class BasketWorkspace
             {
                 case MaterialKind.Text:
                     _shell.CopyText(MaterialPreview.ReadAllText(entry.FullPath));
+                    _clipboardTransfer = null;
                     break;
                 case MaterialKind.Link:
                     _shell.CopyText(MaterialPreview.ReadLinkTarget(entry.FullPath));
+                    _clipboardTransfer = null;
                     break;
                 case MaterialKind.Image:
                     _shell.CopyImageToClipboard(entry.FullPath);
+                    _clipboardTransfer = null;
                     break;
                 default:
                     CopyFileSelection([entry.FullPath], move: false);
@@ -830,10 +896,26 @@ public sealed class BasketWorkspace
         return TransferFiles(paths, target, FileTransferIntent.Move);
     }
 
-    public void Refresh()
+    public bool Refresh()
     {
-        if (AdoptFolders()) SaveStateQuietly();
+        try
+        {
+            if (!IsInitialized)
+            {
+                Initialize();
+                return true;
+            }
+            var hasPendingRename = _pendingRename is not null;
+            var adopted = AdoptFolders();
+            if (adopted || hasPendingRename) SaveStateQuietly();
+        }
+        catch (Exception ex)
+        {
+            Fail(_text.Format("Error_RefreshWorkspace", ex.Message));
+            return false;
+        }
         Publish(WorkspaceChangeKind.View);
+        return true;
     }
 
     public void ReportStatus(string message)
@@ -841,6 +923,8 @@ public sealed class BasketWorkspace
         SetStatus(message);
         Publish();
     }
+
+    public void ReportError(string message) => Fail(message);
 
     private void LoadTabs(WorkspaceState state)
     {
@@ -858,33 +942,9 @@ public sealed class BasketWorkspace
 
             if (!IsDirectoryComponent(saved.DirectoryName)) continue;
             var directoryPath = Path.Combine(_basketsRoot, saved.DirectoryName);
-            var pending = state.PendingRename;
-            if (pending?.Uid == saved.Uid && IsDirectoryComponent(pending.DirectoryName) &&
-                IsDirectoryComponent(pending.TemporaryDirectoryName))
-            {
-                var target = Path.Combine(_basketsRoot, pending.DirectoryName);
-                var temporary = Path.Combine(_basketsRoot, pending.TemporaryDirectoryName);
-                // The temporary path is used only for case-only renames; never merge or overwrite.
-                if (!Directory.Exists(directoryPath) && Directory.Exists(temporary))
-                {
-                    try { Directory.Move(temporary, Directory.Exists(target) ? directoryPath : target); }
-                    catch (Exception ex)
-                    {
-                        // Keep the same basket reachable even if the recovery move is denied.
-                        directoryPath = temporary;
-                        SetError(_text.Format("Error_RenameFolder", ex.Message));
-                    }
-                }
-                var targetHasExactName = Directory.EnumerateDirectories(_basketsRoot)
-                    .Any(path => string.Equals(Path.GetFileName(path), pending.DirectoryName, StringComparison.Ordinal));
-                if (targetHasExactName &&
-                    (!Directory.Exists(directoryPath) || string.Equals(directoryPath, target, StringComparison.OrdinalIgnoreCase)))
-                {
-                    directoryPath = target;
-                    saved.Name = pending.Name;
-                }
-            }
-            if (!Directory.Exists(directoryPath))
+            var isPendingBasket = _pendingRename?.Uid == saved.Uid;
+            if (isPendingBasket) _pendingRename!.SourceDirectoryName ??= saved.DirectoryName;
+            if (!isPendingBasket && !Directory.Exists(directoryPath))
             {
                 continue;
             }
@@ -895,8 +955,75 @@ public sealed class BasketWorkspace
             _savedFolders[saved.Uid] = NormalizeRelativePath(saved.SelectedFolder) ?? string.Empty;
         }
 
-        AdoptFolders();
+        try { AdoptFolders(); }
+        catch (Exception) when (_pendingRename is not null)
+        {
+            SetError(_text.Get("Error_RenameRecoveryPending"));
+        }
     }
+
+    private enum DirectoryPresence { Present, Missing, Unreadable }
+
+    private static DirectoryPresence ObserveDirectory(string name, IReadOnlyList<string> entries)
+    {
+        var exact = entries.FirstOrDefault(path => string.Equals(Path.GetFileName(path), name, StringComparison.Ordinal));
+        if (exact is null) return DirectoryPresence.Missing;
+        try
+        {
+            return File.GetAttributes(exact).HasFlag(FileAttributes.Directory)
+                ? DirectoryPresence.Present : DirectoryPresence.Unreadable;
+        }
+        catch (Exception) { return DirectoryPresence.Unreadable; }
+    }
+
+    private bool TryResolvePendingRename()
+    {
+        if (_pendingRename is not { } pending) return true;
+        var index = _tabs.FindIndex(tab => tab.Uid == pending.Uid);
+        if (index < 0 || !IsDirectoryComponent(pending.SourceDirectoryName) || !IsDirectoryComponent(pending.DirectoryName) ||
+            (pending.TemporaryDirectoryName is not null && !IsDirectoryComponent(pending.TemporaryDirectoryName)))
+            return RenameStillUnresolved();
+
+        string[] entries;
+        try { entries = Directory.GetFileSystemEntries(_basketsRoot); }
+        catch (Exception) { return RenameStillUnresolved(); }
+        var names = new[] { pending.SourceDirectoryName!, pending.DirectoryName, pending.TemporaryDirectoryName }
+            .OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+        var observations = names.Select(name => (Name: name, Presence: ObserveDirectory(name, entries))).ToArray();
+        if (observations.Any(item => item.Presence == DirectoryPresence.Unreadable)) return RenameStillUnresolved();
+        var present = observations.Where(item => item.Presence == DirectoryPresence.Present).ToArray();
+        if (present.Length != 1) return RenameStillUnresolved();
+
+        var actualName = present[0].Name;
+        var tab = _tabs[index];
+        if (actualName == pending.TemporaryDirectoryName)
+        {
+            var temporary = Path.Combine(_basketsRoot, actualName);
+            try { Directory.Move(temporary, Path.Combine(_basketsRoot, pending.DirectoryName)); }
+            catch (Exception)
+            {
+                _tabs[index] = tab with { DirectoryPath = temporary };
+                return RenameStillUnresolved();
+            }
+            actualName = pending.DirectoryName;
+        }
+        _tabs[index] = tab with
+        {
+            DirectoryPath = Path.Combine(_basketsRoot, actualName),
+            DisplayName = actualName == pending.DirectoryName ? NormalizeDisplayName(pending.Name) ?? tab.DisplayName : tab.DisplayName,
+        };
+        return true;
+    }
+
+    private bool RenameStillUnresolved()
+    {
+        SetError(_text.Get("Error_RenameRecoveryPending"));
+        return false;
+    }
+
+    private bool IsPendingRenameDirectory(string name) => _pendingRename is { } pending &&
+        new[] { pending.SourceDirectoryName, pending.DirectoryName, pending.TemporaryDirectoryName }
+            .Any(candidate => string.Equals(name, candidate, StringComparison.OrdinalIgnoreCase));
 
     private bool AdoptFolders()
     {
@@ -906,8 +1033,10 @@ public sealed class BasketWorkspace
         var orphanDirectories = new DirectoryInfo(_basketsRoot)
             .EnumerateDirectories("*", ChildEntriesOptions)
             .Where(info => _tabs.All(tab => !string.Equals(tab.DirectoryPath, info.FullName, StringComparison.OrdinalIgnoreCase)))
+            .Where(info => !IsPendingRenameDirectory(info.Name))
             .OrderBy(info => info.CreationTimeUtc)
-            .ThenBy(info => info.Name, StringComparer.Ordinal);
+            .ThenBy(info => info.Name, StringComparer.Ordinal)
+            .ToList();
 
         foreach (var directory in orphanDirectories)
         {
@@ -947,6 +1076,7 @@ public sealed class BasketWorkspace
 
             var uid = new string(chars);
             if (_tabs.All(tab => !string.Equals(tab.Uid, uid, StringComparison.Ordinal)) &&
+                !IsPendingRenameDirectory(uid) &&
                 !Directory.Exists(Path.Combine(_basketsRoot, uid)))
             {
                 return uid;
@@ -956,16 +1086,25 @@ public sealed class BasketWorkspace
         throw new InvalidOperationException(_text.Get("Error_GenerateUid"));
     }
 
-    private int TransferFiles(IReadOnlyList<string> paths, TargetFolder target, FileTransferIntent intent)
+    private int TransferFiles(IReadOnlyList<string> paths, TargetFolder target, FileTransferIntent intent,
+        LocalClipboardTransfer? localTransfer = null)
     {
         var tab = ActiveTab;
         if (tab is null) return 0;
 
-        var result = _transfers.Execute(paths, tab.DirectoryPath, target.Path, target.Folder, intent);
-        SetStatus(result.Status);
-        if (result.Problems.Count > 0)
+        var result = _transfers.Execute(paths, tab.DirectoryPath, target.Path, intent);
+        if (localTransfer?.Mode == LocalClipboardMode.CutPending && _clipboardTransfer == localTransfer)
         {
-            SetError(string.Join(Environment.NewLine, result.Problems.Take(6)));
+            if (result.Items.Any(item => item.Outcome is TransferOutcome.Partial or TransferOutcome.Unknown))
+                _clipboardTransfer = localTransfer with { Mode = LocalClipboardMode.CutUncertain };
+            else if (result.Items.Any(item => item.Outcome == TransferOutcome.Moved))
+                _clipboardTransfer = localTransfer with { Mode = LocalClipboardMode.CutConsumed };
+        }
+        SetStatus(result.FormatStatus(intent, target.Folder, _text));
+        var problems = result.Problems;
+        if (problems.Count > 0)
+        {
+            SetError(string.Join(Environment.NewLine, problems.Take(6)));
         }
         Commit();
         return result.Completed;
@@ -989,8 +1128,8 @@ public sealed class BasketWorkspace
 
     private void CopyFileSelection(IReadOnlyList<string> paths, bool move)
     {
-        _shell.CopyFilesToClipboard(paths, move);
-        _transfers.RememberClipboard(paths, move);
+        var token = _shell.CopyFilesToClipboard(paths, move);
+        _clipboardTransfer = new(token, move ? LocalClipboardMode.CutPending : LocalClipboardMode.Copy);
     }
 
     private int AddImage(byte[]? pngBytes, string targetDirectory)
@@ -1118,20 +1257,25 @@ public sealed class BasketWorkspace
         return _formatter.Format(_clock.Now);
     }
 
-    private void SaveStateQuietly()
+    private bool SaveStateQuietly()
     {
+        if (!IsInitialized) return false;
         try
         {
-            _stateStore.Save(CreateState());
+            var completeRename = _pendingRename is not null && TryResolvePendingRename();
+            _stateStore.Save(CreateState(completeRename));
+            if (completeRename) _pendingRename = null;
+            return true;
         }
         catch (Exception ex)
         {
             StatusMessage = _text.Format("Error_SaveTabState", ex.Message);
             StatusIsError = true;
+            return false;
         }
     }
 
-    private WorkspaceState CreateState(BasketRenameState? pendingRename = null) => new()
+    private WorkspaceState CreateState(bool completeRename = false) => new()
     {
         Version = WorkspaceState.CurrentVersion,
         ActiveUid = _activeUid,
@@ -1142,7 +1286,7 @@ public sealed class BasketWorkspace
             Name = tab.DisplayName,
             SelectedFolder = Navigation.FolderFor(tab.Uid),
         }).ToList(),
-        PendingRename = pendingRename,
+        PendingRename = completeRename ? null : _pendingRename,
         RecentCopiedPaths = [.. _recentCopiedPaths],
         Window = Geometry.Placement,
         PreviewWidth = Geometry.PreviewWidth,
@@ -1166,6 +1310,15 @@ public sealed class BasketWorkspace
 
     private TargetFolder? ResolveWritableDirectory(string? relativeFolder)
     {
+        if (_pendingRename?.Uid == ActiveTab?.Uid && ActiveTab is { } pendingTab && !Directory.Exists(pendingTab.DirectoryPath))
+        {
+            SaveStateQuietly();
+            if (ActiveTab is { } current && !Directory.Exists(current.DirectoryPath))
+            {
+                Fail(_text.Get("Error_RenameRecoveryPending"));
+                return null;
+            }
+        }
         var target = ResolveRequestedFolder(relativeFolder);
         if (target is null) return null;
         try

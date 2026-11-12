@@ -24,7 +24,7 @@ public sealed class FolderWatcher : IWorkspaceWatcher
     private Timer? _timer;
     private long _generation;
     private DateTime _suspendedUntilUtc;
-    private int _dirty;
+    private bool _dirty;
     private bool _disposed;
 
     /// <summary>Raised on a background thread after a burst of file-system changes.</summary>
@@ -48,7 +48,7 @@ public sealed class FolderWatcher : IWorkspaceWatcher
             _timer?.Dispose();
             _timer = null;
             _generation++;
-            Interlocked.Exchange(ref _dirty, 0);
+            _dirty = false;
             _suspendedUntilUtc = default;
             var generation = _generation;
 
@@ -85,7 +85,7 @@ public sealed class FolderWatcher : IWorkspaceWatcher
             _timer = null;
             _generation++;
             _suspendedUntilUtc = default;
-            Interlocked.Exchange(ref _dirty, 0);
+            _dirty = false;
         }
     }
 
@@ -96,7 +96,7 @@ public sealed class FolderWatcher : IWorkspaceWatcher
         lock (_gate)
         {
             _suspendedUntilUtc = DateTime.UtcNow + window;
-            if (_dirty != 0)
+            if (_dirty)
                 _timer?.Change(window + TimeSpan.FromMilliseconds(DebounceMilliseconds), Timeout.InfiniteTimeSpan);
         }
     }
@@ -133,7 +133,7 @@ public sealed class FolderWatcher : IWorkspaceWatcher
 
             _timer ??= new Timer(OnTimer, generation, Timeout.Infinite, Timeout.Infinite);
             _timer.Change(delay, Timeout.Infinite);
-            Interlocked.Exchange(ref _dirty, 1);
+            _dirty = true;
         }
     }
 
@@ -143,8 +143,9 @@ public sealed class FolderWatcher : IWorkspaceWatcher
         lock (_gate)
         {
             if (_disposed || _watcher is null || state is not long generation || generation != _generation ||
-                Interlocked.Exchange(ref _dirty, 0) == 0)
+                !_dirty)
                 return;
+            _dirty = false;
             raise = Changed;
         }
 

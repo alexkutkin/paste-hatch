@@ -100,6 +100,10 @@
   <data name="Error_SaveTabState" xml:space="preserve"><value>Could not save the tab state: {0}</value></data>
   <data name="Error_InvalidFolderPath" xml:space="preserve"><value>The folder path is not valid.</value></data>
   <data name="Error_WatchFolder" xml:space="preserve"><value>Could not start watching the folder: {0}</value></data>
+  <data name="Error_RefreshWorkspace" xml:space="preserve"><value>Could not refresh the baskets: {0}</value></data>
+  <data name="Error_WorkspaceNotReady" xml:space="preserve"><value>The workspace has not loaded. Restore access to its data and refresh before creating a basket.</value></data>
+  <data name="Error_RenameRecoveryPending" xml:space="preserve"><value>A previous basket rename is unresolved. Recovery information has been kept. Check the original and destination folders and access to the state file, then refresh before renaming or recycling the basket.</value></data>
+  <data name="Error_RenameAppliedStatePending" xml:space="preserve"><value>The basket folder was renamed, but saving its new association failed. Recovery information has been kept: {0}</value></data>
 
   <!-- Core: file transfer -->
   <data name="Error_FileNotFoundPath" xml:space="preserve"><value>File not found: {0}</value></data>
@@ -234,4 +238,8 @@
   <data name="Settings_ConfirmBasketDeletion" xml:space="preserve"><value>Confirm basket deletion</value></data>
   <data name="Settings_ConfirmBasketDeletionDesc" xml:space="preserve"><value>Ask before moving a basket and its contents to the Recycle Bin.</value></data>
   <data name="Tray_RecentCopiedPaths" xml:space="preserve"><value>Recently copied paths</value></data>
+  <data name="Status_CutAlreadyPasted" xml:space="preserve"><value>This cut selection has already been pasted. Cut another item to move it.</value></data>
+  <data name="Error_CutOutcomeUnknown" xml:space="preserve"><value>The previous move did not finish with a confirmed result. Check the source and destination, then cut the item again if needed.</value></data>
+  <data name="Error_TransferPartial" xml:space="preserve"><value>The copy is incomplete. Files may remain at {0}. {1}</value></data>
+  <data name="Error_TransferUnknown" xml:space="preserve"><value>The transfer outcome is uncertain. Check the source {0} and destination {1} before retrying. {2}</value></data>
 </root>

@@ -10,23 +10,12 @@ namespace PasteHatch.Platform;
 /// <summary>
 /// Reads the Windows clipboard once per Ctrl+V and normalizes it into a
 /// <see cref="PastePayload"/>. The clipboard is retried for a short while when another
-/// process holds it open (<see cref="System.Runtime.InteropServices.ExternalException"/>); any other failure degrades to
-/// <see cref="PastePayload.None"/> because pasting must never surface an exception.
+/// process holds it open (<see cref="System.Runtime.InteropServices.ExternalException"/>).
+/// A failed read propagates to the workspace, preserving the previous local transfer intent.
 /// </summary>
 public sealed class ClipboardReader : IClipboardReader
 {
-    public PastePayload Read()
-    {
-        try
-        {
-            return ClipboardAccess.Retry(ReadClipboard);
-        }
-        catch (Exception)
-        {
-            // Clipboard failures leave nothing pasteable; writes report their errors instead.
-            return PastePayload.None;
-        }
-    }
+    public PastePayload Read() => ClipboardAccess.Retry(ReadClipboard);
 
     private static PastePayload ReadClipboard()
     {
@@ -50,7 +39,9 @@ public sealed class ClipboardReader : IClipboardReader
 
             if (paths.Count > 0)
             {
-                return PastePayload.FromFiles(paths);
+                Guid? token = data.GetData(ClipboardAccess.LocalTransferFormat, autoConvert: false) is string value &&
+                    Guid.TryParseExact(value, "N", out var parsed) ? parsed : null;
+                return PastePayload.FromFiles(paths, token);
             }
         }
 

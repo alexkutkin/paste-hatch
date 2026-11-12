@@ -74,20 +74,23 @@ public sealed class ShellService : IShellService
         ClipboardAccess.Retry(() => Clipboard.SetDataObject(data, copy: true));
     }
 
-    public void CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)
+    public Guid CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)
     {
         ArgumentNullException.ThrowIfNull(paths);
         if (paths.Count == 0)
         {
-            return;
+            throw new ArgumentException("A file clipboard selection must not be empty.", nameof(paths));
         }
 
         var data = new DataObject();
         data.SetData(DataFormats.FileDrop, paths.ToArray());
+        var token = Guid.NewGuid();
+        data.SetData(ClipboardAccess.LocalTransferFormat, token.ToString("N"));
 
         // Preferred DropEffect is what Explorer reads to decide between copy and cut.
         var effect = new MemoryStream(BitConverter.GetBytes(move ? 2u : 1u));
         data.SetData("Preferred DropEffect", effect);
         ClipboardAccess.Retry(() => Clipboard.SetDataObject(data, copy: true));
+        return token;
     }
 }

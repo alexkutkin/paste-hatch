@@ -61,7 +61,9 @@ public sealed class WindowPlacementState
 public sealed class BasketRenameState
 {
     public string Uid { get; set; } = string.Empty;
+    public string? SourceDirectoryName { get; set; }
     public string DirectoryName { get; set; } = string.Empty;
-    public string TemporaryDirectoryName { get; set; } = string.Empty;
+    /// <summary>Read only for interrupted two-step renames written by earlier v4 versions.</summary>
+    public string? TemporaryDirectoryName { get; set; }
     public string Name { get; set; } = string.Empty;
 }

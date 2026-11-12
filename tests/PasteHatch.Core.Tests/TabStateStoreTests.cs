@@ -119,6 +119,48 @@ public sealed class TabStateStoreTests : IDisposable
     }
 
     [Fact]
+    public void Save_PendingRenameRoundTripsSourceAndOmitsUnusedLegacyTemporaryPath()
+    {
+        var store = CreateStore();
+        store.Save(new WorkspaceState
+        {
+            Tabs = [new TabState { Uid = "stable", DirectoryName = "Current", Name = "Basket" }],
+            PendingRename = new BasketRenameState
+            {
+                Uid = "stable", SourceDirectoryName = "Original", DirectoryName = "Target", Name = "New basket",
+            },
+        });
+
+        var loaded = store.Load().PendingRename;
+
+        Assert.NotNull(loaded);
+        Assert.Equal("Original", loaded.SourceDirectoryName);
+        Assert.Equal("Target", loaded.DirectoryName);
+        Assert.Null(loaded.TemporaryDirectoryName);
+        Assert.DoesNotContain("temporaryDirectoryName", File.ReadAllText(store.StateFilePath));
+    }
+
+    [Fact]
+    public void Load_LegacyRenameCapturesOriginalSourceBeforeCurrentAssociationChanges()
+    {
+        File.WriteAllText(_temp.StateFile, """
+            {"version":4,"tabs":[{"uid":"stable","directoryName":"Original","name":"Basket"}],
+             "pendingRename":{"uid":"stable","directoryName":"Target","name":"New basket","temporaryDirectoryName":"~old.tmp"}}
+            """);
+        var state = CreateStore().Load();
+        Assert.NotNull(state.PendingRename);
+        Assert.Equal("Original", state.PendingRename.SourceDirectoryName);
+        state.Tabs[0].DirectoryName = "~old.tmp";
+        CreateStore().Save(state);
+
+        var reloaded = CreateStore().Load().PendingRename;
+
+        Assert.NotNull(reloaded);
+        Assert.Equal("Original", reloaded.SourceDirectoryName);
+        Assert.Equal("~old.tmp", reloaded.TemporaryDirectoryName);
+    }
+
+    [Fact]
     public void Save_LeavesNoTemporaryFileBehind()
     {
         var store = CreateStore();

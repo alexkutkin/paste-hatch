@@ -7,13 +7,11 @@ namespace PasteHatch.Ui;
 
 public sealed class BasketRow : INotifyPropertyChanged
 {
-    private bool _isEditing;
-    private string _editText;
+    private string? _editText;
 
     public BasketRow(BasketTab tab, bool canClose)
     {
         Tab = tab;
-        _editText = tab.DisplayName;
         CanClose = canClose;
     }
 
@@ -29,29 +27,14 @@ public sealed class BasketRow : INotifyPropertyChanged
 
     public Visibility CloseVisibility => CanClose ? Visibility.Visible : Visibility.Collapsed;
 
-    public bool IsEditing
-    {
-        get => _isEditing;
-        private set
-        {
-            if (_isEditing == value)
-            {
-                return;
-            }
-
-            _isEditing = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(NameVisibility));
-            OnPropertyChanged(nameof(EditVisibility));
-        }
-    }
+    public bool IsEditing => _editText is not null;
 
     public string EditText
     {
-        get => _editText;
+        get => _editText ?? Name;
         set
         {
-            if (_editText == value)
+            if (_editText is null || _editText == value)
             {
                 return;
             }
@@ -61,17 +44,30 @@ public sealed class BasketRow : INotifyPropertyChanged
         }
     }
 
-    public Visibility NameVisibility => _isEditing ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility NameVisibility => IsEditing ? Visibility.Collapsed : Visibility.Visible;
 
-    public Visibility EditVisibility => _isEditing ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility EditVisibility => IsEditing ? Visibility.Visible : Visibility.Collapsed;
 
     public void BeginEdit()
     {
-        EditText = Name;
-        IsEditing = true;
+        _editText = Name;
+        NotifyEditState();
     }
 
-    public void EndEdit() => IsEditing = false;
+    public void EndEdit()
+    {
+        if (_editText is null) return;
+        _editText = null;
+        NotifyEditState();
+    }
+
+    private void NotifyEditState()
+    {
+        OnPropertyChanged(nameof(EditText));
+        OnPropertyChanged(nameof(IsEditing));
+        OnPropertyChanged(nameof(NameVisibility));
+        OnPropertyChanged(nameof(EditVisibility));
+    }
 
     public override string ToString() => Name;
 

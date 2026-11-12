@@ -12,8 +12,15 @@ The diagrams match the implemented application. Stack and decision rationale:
 Each basket has a stable UID independent of its mutable directory name. State version 4
 persists their association; older files are upgraded at the read boundary without renaming
 existing directories. Explicit rename moves the directory and records a durable rename intent
-before the move so interrupted state writes can recover the association on startup. Paths
+before the move so interrupted state writes can recover the association on startup. New
+renames use one filesystem move, including case-only changes supported by .NET 10.
+Recovery retains unreadable or ambiguous observations instead of treating them as absent;
+existing journals containing an intermediate path remain readable. Paths
 copied before a rename remain literal historical values and may become stale.
+
+An incomplete startup cannot write workspace metadata or create baskets. Refresh retries
+the full initialization after filesystem access is restored, preserving saved identities
+instead of adopting the same directories into a fresh model.
 
 Raw pasted text uses its first five words for a Windows-safe, collision-free `.txt` filename.
 Quick Note, URL and image naming retain their separate existing rules. Basket deletion uses
@@ -76,10 +83,16 @@ flowchart LR
 Responsibility boundaries:
 
 - **File transfer** is concentrated in `FileTransfer`: import, explicit copy and move share
-  path checks, collision handling and partial-success handling. `BasketWorkspace` publishes
-  the final result and records copy/cut intent together with each file-clipboard write; the window
-  passes user actions through. `MaterialNaming` owns filename safety and collision allocation for
-  both files and folders.
+  path checks, collision handling and per-item effects. Counts and messages derive from those
+  effects, including incomplete copies and an uncertain source-removal outcome. Moves of folders
+  between this workspace's ordinary baskets use a direct directory move. Redirected
+  cross-basket paths and external folders retain copying followed by recycling, selected
+  before mutation. `BasketWorkspace` publishes the final result and owns one local clipboard
+  operation. A private token is written in the same Windows DataObject as FileDrop and identifies
+  that operation across reads. Copy is repeatable; confirmed Cut is consumed; an uncertain Cut
+  cannot be retried without a new selection. Equal paths alone never authorize a move. The
+  window passes user actions through. `MaterialNaming` owns filename safety and collision
+  allocation for both files and folders.
 - **Tree state** is held by the workspace-owned `BasketTreeNavigation`: selection and expanded folders belong to
   the basket UID, and the current folder is derived from the selection (a selected folder is
   current, a selected file's parent is current), so no other module keeps a copy of it. Persistence reads navigation directly; constructing a
@@ -95,8 +108,12 @@ Responsibility boundaries:
   baskets root; visible folders copied there are adopted as baskets with their original names,
   subject to the 100-basket limit. Stale notifications are dropped, errors cause
   a re-walk. Status messages do not rebuild the tree; content changes defer their own disk
-  notifications. `IWorkspaceWatcher` is implemented by OS watching and a controllable test
-  variant.
+  notifications. Each watch attempt records its target and outcome before publishing an error;
+  ordinary status changes do not retry a failed start. Show, F5, a target change and watcher
+  errors provide explicit retry reasons. Pending work is coalesced by required scope, and a
+  failed disk read or render releases the queue marker. A failed read preserves the displayed
+  tree until a later successful refresh. `IWorkspaceWatcher` is implemented by OS watching and
+  a controllable test variant.
 
 - **PasteHatch.Core** knows nothing about WinUI: the domain rules (the 100-basket limit,
   "the last basket never closes", tree sorting and traversal, name collisions, type
@@ -126,11 +143,14 @@ keep basket rail, tree, preview, commands, drag/drop, layout and settings state 
 handlers. They remain one WinUI window rather than pass-through controller layers.
 
 `JsonFile<T>` owns forgiving JSON reads and atomic replacement for both metadata stores.
-`TabStateStore` retains schema migration. `DiskRename` owns case-only disk moves and rollback;
-basket durable rename intent and startup recovery remain in the workspace.
-`ClipboardAccess` owns the Windows contention retry policy; readers retain an empty-payload
-fallback and writers propagate failures. External drops check that their captured basket is
-still active after asynchronous clipboard retrieval.
+`TabStateStore` retains schema migration. Basket durable rename intent and startup recovery
+remain in the workspace; file and folder renames use the direct .NET filesystem operations.
+`ClipboardAccess` owns the Windows contention retry policy. Read failures propagate to the
+workspace without pretending the clipboard was replaced; a successful empty read remains an
+empty payload. External drops check that their captured basket is still active after
+asynchronous retrieval. Deferred selection and editor focus also validate their captured
+context. Inline editors own one nullable draft and finish explicitly on Submit, independently
+of later tree rebuilds.
 
 Build, run, shortcut and verification scripts obtain the executable location through
 `project-output.ps1`, which asks MSBuild for evaluated output properties. Test locale resources

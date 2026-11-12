@@ -83,6 +83,60 @@ public sealed class BasketIdentityTests : IDisposable
     }
 
     [Fact]
+    public void Rename_UnchangedNameDoesNotWriteIntentOrRenameDirectory()
+    {
+        var setup = _harness.CreateInitializedWorkspace();
+        Assert.True(setup.RenameTab(setup.RequireActiveTab().Uid, "Unchanged basket"));
+        var store = new FailingStore(_harness.Store, state => state.PendingRename is not null);
+        var workspace = new BasketWorkspace(_harness.Temp.BasketsRoot, store, _harness.Clipboard,
+            _harness.Shell, _harness.Confirmations, _harness.Clock, text: _harness.Text);
+        workspace.Initialize();
+        var before = workspace.RequireActiveTab();
+
+        Assert.True(workspace.RenameTab(before.Uid, before.DisplayName));
+
+        Assert.Equal(before, workspace.RequireActiveTab());
+        Assert.False(workspace.StatusIsError);
+        Assert.Null(_harness.ReadSavedState().PendingRename);
+        Assert.True(Directory.Exists(before.DirectoryPath));
+    }
+
+    [Fact]
+    public void Rename_SameDisplayNameStillRenamesNoncanonicalDirectory()
+    {
+        var directory = _harness.Temp.CreateBasketDirectory("AB2CD3");
+        _harness.Store.Save(new WorkspaceState
+        {
+            ActiveUid = "stable",
+            Tabs = [new TabState { Uid = "stable", DirectoryName = "AB2CD3", Name = "Named basket" }],
+        });
+        var workspace = _harness.CreateInitializedWorkspace();
+
+        Assert.True(workspace.RenameTab("stable", "Named basket"));
+
+        Assert.Equal("Named_basket", Path.GetFileName(workspace.RequireActiveTab().DirectoryPath));
+        Assert.False(Directory.Exists(directory));
+    }
+
+    [Fact]
+    public void Rename_DisplayOnlyChangeDoesNotWriteDiskIntent()
+    {
+        var setup = _harness.CreateInitializedWorkspace();
+        Assert.True(setup.RenameTab(setup.RequireActiveTab().Uid, "Named basket"));
+        var store = new FailingStore(_harness.Store, state => state.PendingRename is not null);
+        var workspace = new BasketWorkspace(_harness.Temp.BasketsRoot, store, _harness.Clipboard,
+            _harness.Shell, _harness.Confirmations, _harness.Clock, text: _harness.Text);
+        workspace.Initialize();
+        var before = workspace.RequireActiveTab();
+
+        Assert.True(workspace.RenameTab(before.Uid, "Named   basket"));
+
+        Assert.Equal(before.DirectoryPath, workspace.RequireActiveTab().DirectoryPath);
+        Assert.Equal("Named   basket", workspace.RequireActiveTab().DisplayName);
+        Assert.Null(_harness.ReadSavedState().PendingRename);
+    }
+
+    [Fact]
     public void Rename_CaseOnlyPreservesIdentityAndExactDirectoryCase()
     {
         var workspace = _harness.CreateInitializedWorkspace();
@@ -149,6 +203,35 @@ public sealed class BasketIdentityTests : IDisposable
     }
 
     [Fact]
+    public void Rename_FinalSaveFailurePreservesIntentAcrossAmbiguityAndOrdinarySaves()
+    {
+        var store = new FailingStore(_harness.Store, state => state.PendingRename is null &&
+            state.Tabs.Any(tab => tab.DirectoryName == "Saved_basket"));
+        var workspace = new BasketWorkspace(_harness.Temp.BasketsRoot, store, _harness.Clipboard,
+            _harness.Shell, _harness.Confirmations, _harness.Clock, text: _harness.Text);
+        workspace.Initialize();
+        var original = workspace.RequireActiveTab();
+        File.WriteAllText(Path.Combine(original.DirectoryPath, "note.txt"), "original");
+        Assert.False(workspace.RenameTab(original.Uid, "Saved basket"));
+        Directory.CreateDirectory(original.DirectoryPath);
+        File.WriteAllText(Path.Combine(original.DirectoryPath, "replacement.txt"), "replacement");
+
+        workspace.SaveState();
+
+        Assert.NotNull(_harness.ReadSavedState().PendingRename);
+        workspace.Refresh();
+        Assert.Equal(original.Uid, Assert.Single(workspace.Tabs).Uid);
+        Assert.False(workspace.RenameTab(original.Uid, "Another rename"));
+        Assert.NotNull(_harness.ReadSavedState().PendingRename);
+        var restored = _harness.CreateInitializedWorkspace();
+        var recovered = Assert.Single(restored.Tabs);
+        Assert.Equal(original.Uid, recovered.Uid);
+        Assert.Equal("Saved_basket", Path.GetFileName(recovered.DirectoryPath));
+        FileAssert.HasText(Path.Combine(recovered.DirectoryPath, "note.txt"), "original");
+        FileAssert.HasText(Path.Combine(original.DirectoryPath, "replacement.txt"), "replacement");
+    }
+
+    [Fact]
     public void Rename_LockedDirectoryReportsFailureWithoutChangingBasket()
     {
         var workspace = _harness.CreateInitializedWorkspace();
@@ -167,43 +250,235 @@ public sealed class BasketIdentityTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Rename_InterruptedCaseMoveKeepsTemporaryBasketIdentityThroughRefreshSaveAndRestart(bool failRecoverySave)
+    public void Load_LegacyTemporaryBasketKeepsIdentityThroughFailedRecoveryAndLaterCompletes(bool failRecoverySave)
     {
-        var setup = _harness.CreateInitializedWorkspace();
-        var uid = setup.RequireActiveTab().Uid;
-        Assert.True(setup.RenameTab(uid, "Basket"));
-        var original = setup.RequireActiveTab();
-        File.WriteAllText(Path.Combine(original.DirectoryPath, "note.txt"), "recoverable");
-        var store = new InterruptedCaseMoveStore(_harness.Store, original.DirectoryPath, failRecoverySave);
+        var temporary = _harness.Temp.CreateBasketDirectory("~rename.tmp");
+        var materialPath = Path.Combine(temporary, "note.txt");
+        File.WriteAllText(materialPath, "recoverable");
+        _harness.Store.Save(new WorkspaceState
+        {
+            ActiveUid = "stable",
+            Tabs = [new TabState { Uid = "stable", DirectoryName = "Basket", Name = "Basket" }],
+            PendingRename = new BasketRenameState
+            {
+                Uid = "stable", DirectoryName = "BASKET", Name = "BASKET", TemporaryDirectoryName = "~rename.tmp",
+            },
+        });
+        using (var locked = new FileStream(materialPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            ITabStateStore store = failRecoverySave ? new UnavailableStateStore(_harness.Store) : _harness.Store;
+            var workspace = new BasketWorkspace(_harness.Temp.BasketsRoot, store, _harness.Clipboard,
+                _harness.Shell, _harness.Confirmations, _harness.Clock, text: _harness.Text);
+            workspace.Initialize();
+            workspace.RequireError();
+            var stranded = Assert.Single(workspace.Tabs);
+            Assert.Equal("stable", stranded.Uid);
+            Assert.Equal("Basket", stranded.DisplayName);
+            Assert.Equal(temporary, stranded.DirectoryPath);
+            workspace.Refresh();
+            workspace.SaveState();
+            Assert.Equal(stranded, Assert.Single(workspace.Tabs));
+            Assert.NotNull(_harness.ReadSavedState().PendingRename);
+            var restored = _harness.CreateInitializedWorkspace();
+            Assert.Equal(stranded, Assert.Single(restored.Tabs));
+            Assert.Equal(stranded, restored.ActiveTab);
+            var material = Assert.Single(restored.GetEntries(string.Empty));
+            Assert.Equal("note.txt", material.Name);
+            FileAssert.HasText(material.FullPath, "recoverable");
+        }
+        var recovered = _harness.CreateInitializedWorkspace();
+        var basket = Assert.Single(recovered.Tabs);
+        Assert.Equal("stable", basket.Uid);
+        Assert.Equal("BASKET", Path.GetFileName(basket.DirectoryPath));
+        FileAssert.HasText(Path.Combine(basket.DirectoryPath, "note.txt"), "recoverable");
+        Assert.Null(_harness.ReadSavedState().PendingRename);
+    }
+
+    [Fact]
+    public void Initialize_BlockedRootDoesNotOverwriteMetadataAndRefreshRestoresOriginalIdentity()
+    {
+        var source = _harness.Temp.CreateBasketDirectory("Source");
+        var target = _harness.Temp.CreateBasketDirectory("Target");
+        File.WriteAllText(Path.Combine(source, "note.txt"), "original");
+        File.WriteAllText(Path.Combine(target, "other.txt"), "separate");
+        _harness.Store.Save(new WorkspaceState
+        {
+            ActiveUid = "stable",
+            Tabs = [new TabState { Uid = "stable", DirectoryName = "Source", Name = "Original name" }],
+            PendingRename = new BasketRenameState
+            {
+                Uid = "stable", SourceDirectoryName = "Source", DirectoryName = "Target", Name = "Proposed name",
+            },
+        });
+        var originalMetadata = File.ReadAllBytes(_harness.Temp.StateFile);
+        var movedRoot = Path.Combine(_harness.Temp.Root, "Baskets-before-startup");
+        Directory.Move(_harness.Temp.BasketsRoot, movedRoot);
+        File.WriteAllText(_harness.Temp.BasketsRoot, "Blocked before Initialize.");
+        var workspace = _harness.CreateWorkspace();
+        try
+        {
+            Assert.Throws<IOException>(workspace.Initialize);
+
+            workspace.SaveState();
+
+            Assert.Equal(originalMetadata, File.ReadAllBytes(_harness.Temp.StateFile));
+            Assert.False(workspace.Refresh());
+            Assert.False(workspace.IsInitialized);
+            Assert.Equal(originalMetadata, File.ReadAllBytes(_harness.Temp.StateFile));
+            Assert.False(workspace.CanCreateTab);
+        }
+        finally
+        {
+            File.Delete(_harness.Temp.BasketsRoot);
+            Directory.Move(movedRoot, _harness.Temp.BasketsRoot);
+        }
+        Assert.Null(workspace.CreateTab());
+        Assert.Equal(originalMetadata, File.ReadAllBytes(_harness.Temp.StateFile));
+
+        Assert.True(workspace.Refresh());
+
+        var restored = Assert.Single(workspace.Tabs);
+        Assert.Equal("stable", restored.Uid);
+        Assert.Equal("Original name", restored.DisplayName);
+        Assert.Equal(source, restored.DirectoryPath);
+        Assert.NotNull(_harness.ReadSavedState().PendingRename);
+        Assert.True(workspace.CanCreateTab);
+        FileAssert.HasText(Path.Combine(source, "note.txt"), "original");
+        FileAssert.HasText(Path.Combine(target, "other.txt"), "separate");
+    }
+
+    [Fact]
+    public void Initialize_PartiallyLoadedModelCannotBeExposedOrSavedUntilRetryCompletes()
+    {
+        var first = _harness.Temp.CreateBasketDirectory("First");
+        _harness.Temp.CreateBasketDirectory("Second");
+        File.WriteAllText(Path.Combine(first, "note.txt"), "safe");
+        _harness.Store.Save(new WorkspaceState
+        {
+            ActiveUid = "first",
+            Tabs =
+            [
+                new TabState { Uid = "first", DirectoryName = "First", Name = "First basket" },
+                new TabState { Uid = "second", DirectoryName = "Second", Name = "" },
+            ],
+        });
+        var originalMetadata = File.ReadAllBytes(_harness.Temp.StateFile);
+        var failFormatting = true;
+        var formatter = new TabNameFormatter(() => failFormatting
+            ? throw new IOException("Default-name formatting unavailable.") : _harness.Text.Culture);
+        var workspace = new BasketWorkspace(_harness.Temp.BasketsRoot, _harness.Store, _harness.Clipboard,
+            _harness.Shell, _harness.Confirmations, _harness.Clock, formatter, _harness.Text);
+
+        Assert.Throws<IOException>(workspace.Initialize);
+        Assert.False(workspace.IsInitialized);
+        Assert.Empty(workspace.Tabs);
+        Assert.Null(workspace.ActiveTab);
+        Assert.Null(workspace.AddQuickNote("must not write through partial model", string.Empty));
+        Assert.False(workspace.RenameTab("first", "Changed"));
+        Assert.False(workspace.ActivateTab("first"));
+        Assert.False(workspace.ReorderTabs(["second", "first"]));
+        Assert.False(workspace.MoveTab("first", 1));
+        workspace.SaveState();
+        Assert.Equal(originalMetadata, File.ReadAllBytes(_harness.Temp.StateFile));
+
+        failFormatting = false;
+        Assert.True(workspace.Refresh());
+
+        Assert.True(workspace.IsInitialized);
+        Assert.Equal(new[] { "first", "second" }, workspace.Tabs.Select(tab => tab.Uid));
+        Assert.Equal("First basket", workspace.RequireActiveTab().DisplayName);
+        FileAssert.HasText(Assert.Single(workspace.GetEntries(string.Empty)).FullPath, "safe");
+    }
+
+    [Fact]
+    public void Load_MissingRenamePathsPreserveIdentityAndDoNotRecreateEvidence()
+    {
+        _harness.Store.Save(new WorkspaceState
+        {
+            ActiveUid = "stable",
+            Tabs = [new TabState { Uid = "stable", DirectoryName = "Source", Name = "Old basket" }],
+            PendingRename = new BasketRenameState
+            {
+                Uid = "stable", SourceDirectoryName = "Source", DirectoryName = "Target", Name = "New basket",
+            },
+        });
+        var workspace = _harness.CreateInitializedWorkspace();
+        Assert.Equal("stable", Assert.Single(workspace.Tabs).Uid);
+        Assert.NotNull(_harness.ReadSavedState().PendingRename);
+
+        Assert.Null(workspace.AddQuickNote("must not create missing source", string.Empty));
+        Assert.Null(workspace.CreateFolder("child", string.Empty));
+        Assert.False(Directory.Exists(Path.Combine(_harness.Temp.BasketsRoot, "Source")));
+        var independent = workspace.CreateAndRequireTab();
+        Assert.NotNull(workspace.AddQuickNote("independent work", string.Empty));
+        Assert.False(workspace.CloseTab("stable"));
+        Assert.True(Directory.Exists(independent.DirectoryPath));
+
+        var target = _harness.Temp.CreateBasketDirectory("Target");
+        File.WriteAllText(Path.Combine(target, "note.txt"), "restored");
+        workspace.Refresh();
+
+        Assert.Null(_harness.ReadSavedState().PendingRename);
+        var recovered = Assert.Single(workspace.Tabs, tab => tab.Uid == "stable");
+        Assert.Equal(target, recovered.DirectoryPath);
+        Assert.Equal("New basket", recovered.DisplayName);
+        FileAssert.HasText(Path.Combine(recovered.DirectoryPath, "note.txt"), "restored");
+        Assert.Equal(2, workspace.Tabs.Count);
+    }
+
+    [Fact]
+    public void Load_UnreadableRenameObservationKeepsJournalUntilRootIsRestored()
+    {
+        var source = _harness.Temp.CreateBasketDirectory("Source");
+        File.WriteAllText(Path.Combine(source, "note.txt"), "safe");
+        _harness.Store.Save(new WorkspaceState
+        {
+            ActiveUid = "stable",
+            Tabs = [new TabState { Uid = "stable", DirectoryName = "Source", Name = "Old basket" }],
+            PendingRename = new BasketRenameState
+            {
+                Uid = "stable", SourceDirectoryName = "Source", DirectoryName = "Target", Name = "New basket",
+            },
+        });
+        var movedRoot = Path.Combine(_harness.Temp.Root, "Baskets-away");
+        var store = new RootReplacedOnLoadStore(_harness.Store, _harness.Temp.BasketsRoot, movedRoot);
+        var workspace = new BasketWorkspace(_harness.Temp.BasketsRoot, store, _harness.Clipboard,
+            _harness.Shell, _harness.Confirmations, _harness.Clock, text: _harness.Text);
+        try
+        {
+            workspace.Initialize();
+            Assert.Equal("stable", Assert.Single(workspace.Tabs).Uid);
+            workspace.SaveState();
+            Assert.NotNull(_harness.ReadSavedState().PendingRename);
+            workspace.RequireError();
+        }
+        finally
+        {
+            File.Delete(_harness.Temp.BasketsRoot);
+            Directory.Move(movedRoot, _harness.Temp.BasketsRoot);
+        }
+        workspace.Refresh();
+        Assert.Null(_harness.ReadSavedState().PendingRename);
+        Assert.Equal(source, Assert.Single(workspace.Tabs).DirectoryPath);
+        FileAssert.HasText(Path.Combine(source, "note.txt"), "safe");
+    }
+
+    [Fact]
+    public void Rename_NewIntentRecordsOriginalDirectoryWithoutTemporaryPath()
+    {
+        var store = new RecordingStore(_harness.Store);
         var workspace = new BasketWorkspace(_harness.Temp.BasketsRoot, store, _harness.Clipboard,
             _harness.Shell, _harness.Confirmations, _harness.Clock, text: _harness.Text);
         workspace.Initialize();
+        var original = workspace.RequireActiveTab();
 
-        Assert.False(workspace.RenameTab(uid, "BASKET"));
+        Assert.True(workspace.RenameTab(original.Uid, "Renamed basket"));
 
-        workspace.RequireError();
-        var stranded = Assert.Single(workspace.Tabs);
-        Assert.Equal(uid, stranded.Uid);
-        Assert.Equal("Basket", stranded.DisplayName);
-        Assert.True(Directory.Exists(stranded.DirectoryPath));
-        Assert.NotEqual(original.DirectoryPath, stranded.DirectoryPath);
-        using var locked = new FileStream(Path.Combine(stranded.DirectoryPath, "note.txt"),
-            FileMode.Open, FileAccess.Read, FileShare.Read);
-        workspace.Refresh();
-        workspace.SaveState();
-        Assert.Equal(stranded, Assert.Single(workspace.Tabs));
-        Assert.Equal(failRecoverySave, _harness.ReadSavedState().PendingRename is not null);
-
-        var restored = _harness.CreateInitializedWorkspace();
-
-        Assert.Equal(stranded, Assert.Single(restored.Tabs));
-        Assert.Equal(stranded, restored.ActiveTab);
-        var material = Assert.Single(restored.GetEntries(string.Empty));
-        Assert.Equal("note.txt", material.Name);
-        FileAssert.HasText(material.FullPath, "recoverable");
-        restored.Refresh();
-        restored.SaveState();
-        Assert.Equal(stranded, Assert.Single(_harness.CreateInitializedWorkspace().Tabs));
+        var pending = Assert.Single(store.Saved, state => state.PendingRename is not null).PendingRename!;
+        Assert.Equal(Path.GetFileName(original.DirectoryPath), pending.SourceDirectoryName);
+        Assert.Equal("Renamed_basket", pending.DirectoryName);
+        Assert.Null(pending.TemporaryDirectoryName);
+        Assert.Null(_harness.ReadSavedState().PendingRename);
     }
 
     [Fact]
@@ -247,20 +522,33 @@ public sealed class BasketIdentityTests : IDisposable
         Assert.Single(Directory.GetDirectories(_harness.Temp.BasketsRoot));
     }
 
-    private sealed class InterruptedCaseMoveStore(ITabStateStore inner, string source, bool failRecoverySave) : ITabStateStore
+    private sealed class UnavailableStateStore(ITabStateStore inner) : ITabStateStore
     {
-        private bool _interrupted;
+        public WorkspaceState Load() => inner.Load();
+        public void Save(WorkspaceState state) => throw new IOException("State writer unavailable.");
+    }
+
+    private sealed class RecordingStore(ITabStateStore inner) : ITabStateStore
+    {
+        public List<WorkspaceState> Saved { get; } = [];
         public WorkspaceState Load() => inner.Load();
         public void Save(WorkspaceState state)
         {
-            if (_interrupted && failRecoverySave) throw new IOException("State writer unavailable.");
+            Saved.Add(state);
             inner.Save(state);
-            if (state.PendingRename is not { } pending || _interrupted) return;
-            // Reproduce a stranded temporary directory through the public storage boundary,
-            // without depending on a watcher racing the two synchronous filesystem moves.
-            Directory.Move(source, Path.Combine(Path.GetDirectoryName(source)!, pending.TemporaryDirectoryName));
-            _interrupted = true;
         }
+    }
+
+    private sealed class RootReplacedOnLoadStore(ITabStateStore inner, string root, string movedRoot) : ITabStateStore
+    {
+        public WorkspaceState Load()
+        {
+            var state = inner.Load();
+            Directory.Move(root, movedRoot);
+            File.WriteAllText(root, "Root temporarily replaced by a file.");
+            return state;
+        }
+        public void Save(WorkspaceState state) => inner.Save(state);
     }
 
     private sealed class FailingStore(ITabStateStore inner, Func<WorkspaceState, bool> shouldFail) : ITabStateStore
