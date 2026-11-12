@@ -29,7 +29,7 @@ Read-only Doctor checks the owned Process object's liveness, exact binary path a
 
 One script, one sequential session, one lifecycle: `scripts/verify.ps1`. The [feature index](features/README.md) owns the coverage list. ValuePattern fills the real note field; InvokePattern invokes UI commands; SelectionItemPattern and ExpandCollapsePattern navigate real tree nodes. Assertions compare persisted files, state and displayed text. Fixtures do not replace the UI action being tested.
 
-The script fails immediately on an unmet result. Subsequent features are then unverified, even when prior checks passed. Keyboard accelerators, drag/drop, destructive dialogs, rename, basket reorder/close, settings, tray interaction, restart recovery and image appearance are outside this bounded smoke suite. UIA title/placeholder checks do not prove image decoding, so no image-preview claim is made.
+The script fails immediately on an unmet result. Subsequent features are then unverified, even when prior checks passed. The file-workspace journey covers native local Copy identity and unchanged-name submission for a newly created folder. Keyboard accelerators, drag/drop, destructive dialogs, changed-name/file rename, native Cut, basket reorder/close, tray interaction, restart recovery and image appearance are outside this bounded smoke suite. UIA title/placeholder checks do not prove image decoding, so no image-preview claim is made.
 
 ## Evidence
 

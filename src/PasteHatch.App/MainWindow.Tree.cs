@@ -522,15 +522,21 @@ public sealed partial class MainWindow
 
     private void BeginNodeRename(EntryNode node)
     {
-        if (node.IsRoot)
+        if (node.IsRoot || FileTree.SelectedNode is not { } treeNode ||
+            !ReferenceEquals(treeNode.Content, node))
         {
             return;
         }
 
+        var basketUid = _workspace.ActiveTab?.Uid;
+        var relativePath = node.RelativePath;
         node.BeginEdit();
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (FileTree.SelectedNode is not { } treeNode)
+            if (_isExiting || !node.IsEditing || _workspace.ActiveTab?.Uid != basketUid ||
+                !ReferenceEquals(FileTree.SelectedNode, treeNode) ||
+                treeNode.Content is not EntryNode selected || selected.RelativePath != relativePath ||
+                !ReferenceEquals(selected, node))
             {
                 return;
             }
@@ -595,9 +601,9 @@ public sealed partial class MainWindow
 
     private void CommitNodeRename(EntryNode node)
     {
-        if (!_workspace.RenameEntry(node.Entry, node.EditText))
-        {
-            node.EndEdit();
-        }
+        if (!node.IsEditing) return;
+        var name = node.EditText;
+        node.EndEdit();
+        _workspace.RenameEntry(node.Entry, name);
     }
 }

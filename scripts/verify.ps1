@@ -75,8 +75,8 @@ function Select-Node([string]$Name) {
     if (!$node) { throw "Missing tree item: $Name" }
     $node.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
 }
-function Snapshot([string]$Name) {
-    $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object {
+function Snapshot([string]$Name, [System.Windows.Automation.AutomationElement]$Root = $window) {
+    $Root.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object {
         '{0}|{1}|{2}' -f $_.Current.AutomationId,$_.Current.Name,$_.Current.ControlType.ProgrammaticName
     } | Set-Content (Join-Path $run "$Name.ui.txt")
     Copy-Item (Join-Path $data 'state.json') (Join-Path $run "$Name.state.json")
@@ -269,6 +269,53 @@ try {
         $target = Join-Path $basket 'folder2/source-folder/deep/nested.txt'
         (Test-Path $target) -and [IO.File]::ReadAllText($target) -eq 'nested content'
     }
+    $clipboardFile = Join-Path $basket 'folder2/clipboard-copy.bin'
+    $clipboardCopy = Join-Path $basket 'folder2/clipboard-copy (2).bin'
+    [IO.File]::WriteAllBytes($clipboardFile,[byte[]](0,1,2,127,128,255))
+    $clipboardFileHash = (Get-FileHash -LiteralPath $clipboardFile).Hash
+    "ACTION external binary fixture: $clipboardFile" | Add-Content (Join-Path $run 'actions.txt')
+    Wait-For 'binary clipboard fixture appears in the tree' { $null -ne (Find-Node 'clipboard-copy.bin') }
+    Select-Node 'clipboard-copy.bin'
+    $script:rowCopyContent = $null
+    Wait-For 'binary file exposes its content copy command' {
+        $node = Find-Node 'clipboard-copy.bin'
+        if (!$node) { return $false }
+        $script:rowCopyContent = $node.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryCopyContentButton'))
+        $null -ne $rowCopyContent -and $rowCopyContent.Current.IsEnabled
+    }
+    "ACTION invoke binary row content copy" | Add-Content (Join-Path $run 'actions.txt')
+    $rowCopyContent.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'local file copy writes paths, a transfer identity and the Windows copy effect together' {
+        $nativeClipboard = [Windows.Forms.Clipboard]::GetDataObject()
+        if (!$nativeClipboard) { return $false }
+        $paths = @($nativeClipboard.GetData([Windows.Forms.DataFormats]::FileDrop))
+        $token = [guid]::Empty
+        $hasToken = [guid]::TryParse([string]$nativeClipboard.GetData('PasteHatch.LocalTransferToken.v1',$false),[ref]$token)
+        $effect = $nativeClipboard.GetData('Preferred DropEffect',$false)
+        @($paths).Count -eq 1 -and $paths[0] -eq $clipboardFile -and $hasToken -and $token -ne [guid]::Empty -and
+        $effect -is [IO.MemoryStream] -and $effect.Length -ge 4 -and [BitConverter]::ToUInt32($effect.ToArray(),0) -eq 1
+    }
+    [Windows.Forms.Clipboard]::GetDataObject().GetFormats($false) | Set-Content (Join-Path $run 'clipboard-local.formats.txt')
+    Invoke-Control 'PasteButton'
+    Wait-For 'local file copy pastes an exact second file into the same folder' {
+        (Test-Path -LiteralPath $clipboardCopy -PathType Leaf) -and
+        (Get-FileHash -LiteralPath $clipboardCopy).Hash -eq $clipboardFileHash -and
+        (Get-FileHash -LiteralPath $clipboardFile).Hash -eq $clipboardFileHash
+    }
+    $externalFiles = [Collections.Specialized.StringCollection]::new()
+    [void]$externalFiles.Add($clipboardFile)
+    "ACTION replace the clipboard externally with the identical file path" | Add-Content (Join-Path $run 'actions.txt')
+    [Windows.Forms.Clipboard]::SetFileDropList($externalFiles)
+    Invoke-Control 'PasteButton'
+    Wait-For 'external replacement of the same paths uses import without another copy or history event' {
+        (Find-Control 'StatusText').Current.Name -eq (Resw 'en-US' 'Status_AlreadyInBasket') -and
+        @(Get-ChildItem (Join-Path $basket 'folder2') -Filter 'clipboard-copy*.bin' -File).Count -eq 2 -and
+        (Get-FileHash -LiteralPath $clipboardFile).Hash -eq $clipboardFileHash -and
+        (Get-FileHash -LiteralPath $clipboardCopy).Hash -eq $clipboardFileHash -and
+        @((Get-Content (Join-Path $data 'state.json') -Raw -Encoding UTF8 | ConvertFrom-Json).recentCopiedPaths).Count -eq 2
+    }
+    Snapshot 'clipboard-transfer'
     # Selecting the containing folder explicitly avoids relying on post-paste selection.
     Select-Node 'folder2'
     Wait-For 'selected parent persisted exactly' {
@@ -276,8 +323,57 @@ try {
         $persisted.tabs[0].selectedFolder -eq 'folder2'
     }
     $before = @(Get-ChildItem (Join-Path $basket 'folder2') -Directory).FullName
+    $filesBeforeRename = @(Get-ChildItem -LiteralPath $basket -File -Recurse | Sort-Object FullName | ForEach-Object {
+        '{0}|{1}' -f $_.FullName,(Get-FileHash -LiteralPath $_.FullName).Hash
+    })
+    $filesBeforeRename | Set-Content (Join-Path $run 'rename-unchanged.files.txt')
     Invoke-Control 'NewFolderButton'
     Wait-For 'new folder created in selected parent' { @(Get-ChildItem (Join-Path $basket 'folder2') -Directory | Where-Object { $_.FullName -notin $before }).Count -eq 1 }
+    $newFolder = Get-ChildItem (Join-Path $basket 'folder2') -Directory | Where-Object { $_.FullName -notin $before }
+    $saveName = Resw 'en-US' 'Action_SaveName'
+    $script:renameSave = $null
+    Wait-For 'new folder enters inline rename with its original name' {
+        $node = Find-Node $newFolder.Name
+        if (!$node) { return $false }
+        $editor = $node.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Edit))
+        $script:renameSave = $node.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$saveName))
+        $null -ne $editor -and $null -ne $renameSave -and
+        $editor.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -eq $newFolder.Name
+    }
+    Snapshot 'rename-unchanged-editing' (Find-Node $newFolder.Name)
+    $renameNode = Find-Node $newFolder.Name
+    if (!$renameNode) { throw 'The new folder row disappeared before unchanged-name submission.' }
+    $renameEditor = $renameNode.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Edit))
+    $renameSave = $renameNode.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$saveName))
+    if (!$renameEditor -or !$renameSave -or $renameEditor.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -ne $newFolder.Name) {
+        throw 'The unchanged-name editor was no longer active immediately before submission.'
+    }
+    $renameRowRuntime = $renameNode.GetRuntimeId() -join ','
+    $renameStateWritten = [IO.File]::GetLastWriteTimeUtc((Join-Path $data 'state.json')).ToString('o')
+    "ACTION submit unchanged inline name: $($newFolder.FullName)" | Add-Content (Join-Path $run 'actions.txt')
+    $renameSave.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'unchanged name submission closes the inline editor without changing the folder or files' {
+        $node = Find-Node $newFolder.Name
+        if (!$node -or !(Test-Path -LiteralPath $newFolder.FullName -PathType Container)) { return $false }
+        $script:renameObservedRuntime = $node.GetRuntimeId() -join ','
+        $save = $node.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,$saveName))
+        $label = $node.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'EntryNameText'))
+        $filesAfterRename = @(Get-ChildItem -LiteralPath $basket -File -Recurse | Sort-Object FullName | ForEach-Object {
+            '{0}|{1}' -f $_.FullName,(Get-FileHash -LiteralPath $_.FullName).Hash
+        })
+        $renameObservedRuntime -eq $renameRowRuntime -and
+        $null -eq $save -and $null -ne $label -and $label.Current.Name -eq $newFolder.Name -and
+        @((Get-ChildItem (Join-Path $basket 'folder2') -Directory | Where-Object { $_.FullName -notin $before })).Count -eq 1 -and
+        @((Compare-Object $filesBeforeRename $filesAfterRename)).Count -eq 0
+    }
+    "OBSERVATION unchanged rename: row runtime $renameRowRuntime -> $renameObservedRuntime; state written $renameStateWritten -> $([IO.File]::GetLastWriteTimeUtc((Join-Path $data 'state.json')).ToString('o'))" | Add-Content (Join-Path $run 'actions.txt')
+    Snapshot 'rename-unchanged'
     Snapshot 'workspace'
 
     Wait-For 'both basket creation commands are available' {

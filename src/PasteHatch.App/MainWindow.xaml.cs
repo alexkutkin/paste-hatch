@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -227,7 +228,7 @@ public sealed partial class MainWindow : Window
         try
         {
             _tray?.RefreshHistory();
-            if (_editingBasketUid is null)
+            if (!_basketRows.Any(row => row.IsEditing))
             {
                 RefreshBaskets();
             }

@@ -16,16 +16,17 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     private readonly ITextProvider _text;
     private EventHandler? _changed;
     private EventHandler? _error;
-    private string? _watchedUid;
-    private string? _watchedPath;
+    private WatchAttempt? _watchAttempt;
     private long _generation;
     private bool _visible;
     private bool _disposed;
     private bool _scheduled;
-    private bool _treeDirty;
-    private bool _diskDirty;
-    private bool _watchFailed;
-    private bool _startingWatch;
+    private PendingWork _pending;
+
+    private sealed record WatchTarget(string Uid, string Path);
+    private sealed record WatchAttempt(WatchTarget Target, WatchOutcome Outcome);
+    private enum WatchOutcome { Watching, Unavailable }
+    private enum PendingWork { None, Presentation, Tree, ReadDisk, RestartWatchAndReadDisk }
 
     public WorkspaceRefreshCoordinator(BasketWorkspace workspace, IWorkspaceWatcher basketWatcher, IWorkspaceWatcher rootWatcher,
         Func<Action, bool> enqueue, Action<ViewRefresh> render, ITextProvider? text = null)
@@ -43,27 +44,35 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
     {
         if (_disposed) return;
         _visible = visible;
-        UpdateWatch();
-        if (visible) _workspace.Refresh();
+        if (visible) RequestRefresh();
+        else UpdateWatch();
+    }
+
+    /// <summary>Explicitly re-reads disk and retries an unavailable watch for the current target.</summary>
+    public void RequestRefresh()
+    {
+        if (_disposed) return;
+        UpdateWatch(retryUnavailable: true);
+        Request(PendingWork.ReadDisk);
     }
 
     private void OnWorkspaceChanged(object? sender, WorkspaceChange change)
     {
         if (_disposed) return;
         UpdateWatch();
-        if (change.Kind == WorkspaceChangeKind.Contents && _visible)
+        if (change.Kind == WorkspaceChangeKind.Contents && _watchAttempt?.Outcome == WatchOutcome.Watching)
             _watcher.SuppressEcho();
-        _treeDirty |= change.Kind != WorkspaceChangeKind.Status;
-        Schedule();
+        Request(change.Kind == WorkspaceChangeKind.Status ? PendingWork.Presentation : PendingWork.Tree);
     }
 
-    private void UpdateWatch()
+    private void UpdateWatch(bool retryUnavailable = false)
     {
-        if (_startingWatch) return;
         var tab = _visible ? _workspace.ActiveTab : null;
-        if (tab?.Uid == _watchedUid && tab?.DirectoryPath == _watchedPath) return;
+        var target = tab is null ? null : new WatchTarget(tab.Uid, tab.DirectoryPath);
+        if (target == _watchAttempt?.Target &&
+            (!retryUnavailable || _watchAttempt?.Outcome != WatchOutcome.Unavailable)) return;
         StopWatch();
-        if (tab is null) return;
+        if (target is null) return;
         var generation = _generation;
         _changed = (_, _) => QueueDiskChange(generation, false);
         _error = (_, _) => QueueDiskChange(generation, true);
@@ -73,18 +82,16 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         _rootWatcher.Error += _error;
         try
         {
-            _startingWatch = true;
-            _watcher.Watch(tab.DirectoryPath);
+            _watcher.Watch(target.Path);
             _rootWatcher.Watch(_workspace.BasketsRoot, includeSubdirectories: false);
-            _watchedUid = tab.Uid;
-            _watchedPath = tab.DirectoryPath;
+            _watchAttempt = new WatchAttempt(target, WatchOutcome.Watching);
         }
         catch (Exception ex)
         {
             StopWatch();
-            _workspace.ReportStatus(_text.Format("Error_WatchFolder", ex.Message));
+            _watchAttempt = new WatchAttempt(target, WatchOutcome.Unavailable);
+            _workspace.ReportError(_text.Format("Error_WatchFolder", ex.Message));
         }
-        finally { _startingWatch = false; }
     }
 
     private void QueueDiskChange(long generation, bool error)
@@ -92,10 +99,14 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         _enqueue(() =>
         {
             if (_disposed || !_visible || generation != _generation) return;
-            _diskDirty = true;
-            _watchFailed |= error;
-            Schedule();
+            Request(error ? PendingWork.RestartWatchAndReadDisk : PendingWork.ReadDisk);
         });
+    }
+
+    private void Request(PendingWork work)
+    {
+        if (work > _pending) _pending = work;
+        Schedule();
     }
 
     private void Schedule()
@@ -107,23 +118,30 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
 
     private void Flush()
     {
-        if (_disposed) return;
-        // Keep the pending flag while Refresh emits its own Changed event.
-        if (_diskDirty)
+        var work = _pending;
+        _pending = PendingWork.None;
+        try
         {
-            _diskDirty = false;
-            if (_watchFailed)
+            if (_disposed) return;
+            if (work == PendingWork.RestartWatchAndReadDisk)
             {
-                _watchFailed = false;
                 StopWatch();
                 UpdateWatch();
             }
-            _workspace.Refresh();
+            var readSucceeded = work < PendingWork.ReadDisk || _workspace.Refresh();
+            // A successful Refresh publishes its own View change. Render that change in this pass,
+            // but leave a new disk request queued for the next pass, including requests from render.
+            var emittedWork = _pending;
+            if (emittedWork <= PendingWork.Tree && (readSucceeded || emittedWork != PendingWork.Tree))
+                _pending = PendingWork.None;
+            var rebuildTree = readSucceeded && (work >= PendingWork.Tree || emittedWork >= PendingWork.Tree);
+            _render(new ViewRefresh(RebuildTree: rebuildTree));
         }
-        var treeDirty = _treeDirty;
-        _treeDirty = false;
-        _scheduled = false;
-        _render(new ViewRefresh(RebuildTree: treeDirty));
+        finally
+        {
+            _scheduled = false;
+            if (!_disposed && _pending != PendingWork.None) Schedule();
+        }
     }
 
     private void StopWatch()
@@ -136,15 +154,15 @@ public sealed class WorkspaceRefreshCoordinator : IDisposable
         _changed = _error = null;
         _watcher.Stop();
         _rootWatcher.Stop();
-        _watchedUid = null;
-        _watchedPath = null;
-        _diskDirty = _watchFailed = false;
+        _watchAttempt = null;
+        if (_pending >= PendingWork.ReadDisk) _pending = PendingWork.Presentation;
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        _pending = PendingWork.None;
         _workspace.Changed -= OnWorkspaceChanged;
         StopWatch();
         _watcher.Dispose();

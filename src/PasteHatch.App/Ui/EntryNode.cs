@@ -12,15 +12,13 @@ namespace PasteHatch.Ui;
 /// </summary>
 public sealed class EntryNode : INotifyPropertyChanged
 {
-    private bool _isEditing;
-    private string _editText;
+    private string? _editText;
     private bool _actionsPointerOver;
     private bool _actionsFocused;
 
     public EntryNode(BasketEntry entry)
     {
         Entry = entry;
-        _editText = entry.IsFolder ? entry.Name : Path.GetFileNameWithoutExtension(entry.Name);
     }
 
     public EntryNode(string name, string relativePath, string fullPath, bool isFolder, long size = 0, DateTimeOffset modified = default)
@@ -72,29 +70,14 @@ public sealed class EntryNode : INotifyPropertyChanged
             _ => "\uE7C3",
         };
 
-    public bool IsEditing
-    {
-        get => _isEditing;
-        private set
-        {
-            if (_isEditing == value)
-            {
-                return;
-            }
-
-            _isEditing = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(NameVisibility));
-            OnPropertyChanged(nameof(EditVisibility));
-        }
-    }
+    public bool IsEditing => _editText is not null;
 
     public string EditText
     {
-        get => _editText;
+        get => _editText ?? (IsFolder ? Name : Path.GetFileNameWithoutExtension(Name));
         set
         {
-            if (_editText == value)
+            if (_editText is null || _editText == value)
             {
                 return;
             }
@@ -104,9 +87,9 @@ public sealed class EntryNode : INotifyPropertyChanged
         }
     }
 
-    public Visibility NameVisibility => _isEditing ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility NameVisibility => IsEditing ? Visibility.Collapsed : Visibility.Visible;
 
-    public Visibility EditVisibility => _isEditing ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility EditVisibility => IsEditing ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility ContentActionVisibility => IsFolder ? Visibility.Collapsed : Visibility.Visible;
 
@@ -126,11 +109,24 @@ public sealed class EntryNode : INotifyPropertyChanged
 
     public void BeginEdit()
     {
-        EditText = IsFolder ? Name : Path.GetFileNameWithoutExtension(Name);
-        IsEditing = true;
+        _editText = IsFolder ? Name : Path.GetFileNameWithoutExtension(Name);
+        NotifyEditState();
     }
 
-    public void EndEdit() => IsEditing = false;
+    public void EndEdit()
+    {
+        if (_editText is null) return;
+        _editText = null;
+        NotifyEditState();
+    }
+
+    private void NotifyEditState()
+    {
+        OnPropertyChanged(nameof(EditText));
+        OnPropertyChanged(nameof(IsEditing));
+        OnPropertyChanged(nameof(NameVisibility));
+        OnPropertyChanged(nameof(EditVisibility));
+    }
 
     public override string ToString() => Name;
 

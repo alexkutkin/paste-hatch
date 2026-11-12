@@ -20,6 +20,8 @@ internal sealed class FakeShellService : IShellService
 
     public List<bool> CopiedFileMoves { get; } = [];
 
+    public Guid? LastFileTransferToken { get; private set; }
+
     public List<string> CopiedImages { get; } = [];
 
     public Exception? OpenItemFailure { get; set; }
@@ -29,6 +31,8 @@ internal sealed class FakeShellService : IShellService
     public Exception? FileRecycleFailure { get; set; }
 
     public Exception? DirectoryRecycleFailure { get; set; }
+
+    public Action<string>? RecycleDirectoryOverride { get; set; }
 
     public Exception? CopyTextFailure { get; set; }
 
@@ -68,6 +72,11 @@ internal sealed class FakeShellService : IShellService
 
     public void RecycleDirectory(string path)
     {
+        if (RecycleDirectoryOverride is not null)
+        {
+            RecycleDirectoryOverride(path);
+            return;
+        }
         if (DirectoryRecycleFailure is not null)
         {
             throw DirectoryRecycleFailure;
@@ -100,7 +109,7 @@ internal sealed class FakeShellService : IShellService
         CopiedImages.Add(path);
     }
 
-    public void CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)
+    public Guid CopyFilesToClipboard(IReadOnlyList<string> paths, bool move)
     {
         if (CopyTextFailure is not null)
         {
@@ -109,5 +118,8 @@ internal sealed class FakeShellService : IShellService
 
         CopiedFilePathSets.Add(string.Join('\u001f', paths));
         CopiedFileMoves.Add(move);
+        var token = Guid.NewGuid();
+        LastFileTransferToken = token;
+        return token;
     }
 }

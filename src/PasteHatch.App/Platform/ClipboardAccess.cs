@@ -4,6 +4,7 @@ namespace PasteHatch.Platform;
 
 internal static class ClipboardAccess
 {
+    internal const string LocalTransferFormat = "PasteHatch.LocalTransferToken.v1";
     private const int RetryAttempts = 10;
     private const int RetryDelayMilliseconds = 40;
 

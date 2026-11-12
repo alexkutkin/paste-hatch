@@ -21,12 +21,14 @@ public sealed class PastePayload
         PasteContentKind kind,
         IReadOnlyList<string>? files = null,
         byte[]? imagePng = null,
-        string? text = null)
+        string? text = null,
+        Guid? localTransferToken = null)
     {
         Kind = kind;
         Files = files ?? [];
         ImagePng = imagePng;
         Text = text;
+        LocalTransferToken = localTransferToken;
     }
 
     public PasteContentKind Kind { get; }
@@ -37,7 +39,11 @@ public sealed class PastePayload
 
     public string? Text { get; }
 
-    public static PastePayload FromFiles(IReadOnlyList<string> paths) => new(PasteContentKind.Files, files: paths);
+    /// <summary>Identity written with a local FileDrop; absent for ordinary external imports.</summary>
+    public Guid? LocalTransferToken { get; }
+
+    public static PastePayload FromFiles(IReadOnlyList<string> paths, Guid? localTransferToken = null) =>
+        new(PasteContentKind.Files, files: paths, localTransferToken: localTransferToken);
 
     public static PastePayload FromImage(byte[] pngBytes) => new(PasteContentKind.Image, imagePng: pngBytes);
 

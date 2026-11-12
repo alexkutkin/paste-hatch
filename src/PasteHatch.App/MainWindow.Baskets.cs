@@ -14,7 +14,6 @@ public sealed partial class MainWindow
 {
     private readonly ObservableCollection<BasketRow> _basketRows = new();
     private string? _basketSignature;
-    private string? _editingBasketUid;
     private bool _isBasketDrag;
 
     private void RefreshBaskets()
@@ -59,7 +58,9 @@ public sealed partial class MainWindow
     private void UpdateAddButtonState()
     {
         var canCreate = _workspace.CanCreateTab;
-        var tooltip = Localization.Text.Get(canCreate ? "ToolTip_CreateBasket" : "Status_BasketLimit");
+        var tooltip = Localization.Text.Get(!_workspace.IsInitialized
+            ? "Error_WorkspaceNotReady"
+            : canCreate ? "ToolTip_CreateBasket" : "Status_BasketLimit");
         foreach (var button in new[] { AddBasketButton, AddBasketFooterButton })
         {
             button.IsEnabled = canCreate;
@@ -94,16 +95,18 @@ public sealed partial class MainWindow
 
     private void BeginBasketRename(BasketRow row)
     {
-        if (_editingBasketUid is not null)
+        if (_basketRows.Any(candidate => candidate.IsEditing) || !_basketRows.Contains(row))
         {
             return;
         }
 
-        _editingBasketUid = row.Uid;
+        var activeUid = _workspace.ActiveTab?.Uid;
         row.BeginEdit();
 
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (_isExiting || !row.IsEditing || !_basketRows.Contains(row) ||
+                _workspace.ActiveTab?.Uid != activeUid) return;
             var container = BasketsList.ContainerFromItem(row) as ListViewItem;
             var editor = container is null ? null : FindDescendant<TextBox>(container);
             if (editor is not null)
@@ -151,20 +154,19 @@ public sealed partial class MainWindow
 
     private void CommitBasketRename(BasketRow row)
     {
-        if (!string.Equals(_editingBasketUid, row.Uid, StringComparison.Ordinal))
+        if (!row.IsEditing)
         {
             return;
         }
 
-        _editingBasketUid = null;
+        var name = row.EditText;
         row.EndEdit();
-        _workspace.RenameTab(row.Uid, row.EditText);
+        _workspace.RenameTab(row.Uid, name);
         RefreshAll();
     }
 
     private void CancelBasketRename(BasketRow row)
     {
-        _editingBasketUid = null;
         row.EndEdit();
     }
 

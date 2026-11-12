@@ -24,6 +24,7 @@ public interface IShellService
     /// <summary>
     /// Puts files and folders on the clipboard as a standard file drop, so they can also be
     /// pasted into Explorer. <paramref name="move"/> marks a cut (Ctrl+X) instead of a copy.
+    /// Returns the opaque local token stored in the same clipboard snapshot after a successful write.
     /// </summary>
-    void CopyFilesToClipboard(IReadOnlyList<string> paths, bool move);
+    Guid CopyFilesToClipboard(IReadOnlyList<string> paths, bool move);
 }

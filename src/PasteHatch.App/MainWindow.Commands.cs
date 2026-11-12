@@ -1,3 +1,4 @@
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -99,6 +100,8 @@ public sealed partial class MainWindow
 
     private void CreateNewFolder()
     {
+        var basket = _workspace.ActiveTab;
+        if (basket is null) return;
         var folder = _workspace.CreateFolder(
             Localization.Text.Get("Default_NewFolderName"), CurrentFolder, ensureUnique: true);
         if (folder is null)
@@ -108,13 +111,16 @@ public sealed partial class MainWindow
 
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (FileTree.RootNodes.Count == 0)
+            if (_isExiting || _workspace.ActiveTab?.Uid != basket.Uid || FileTree.RootNodes.Count == 0 ||
+                FileTree.RootNodes[0].Content is not EntryNode root ||
+                !string.Equals(root.FullPath, basket.DirectoryPath, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
             var node = SelectTreePath(FileTree.RootNodes[0], folder.RelativePath, select: true);
-            if (node?.Content is EntryNode entry)
+            if (node?.Content is EntryNode entry &&
+                string.Equals(entry.FullPath, folder.FullPath, StringComparison.OrdinalIgnoreCase))
             {
                 BeginNodeRename(entry);
             }
@@ -124,7 +130,7 @@ public sealed partial class MainWindow
     private void OnRefreshAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         args.Handled = true;
-        _workspace.Refresh();
+        _liveRefresh.RequestRefresh();
     }
 
     private void OnOpenFolderClick(object sender, RoutedEventArgs e)

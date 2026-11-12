@@ -100,6 +100,10 @@
   <data name="Error_SaveTabState" xml:space="preserve"><value>Не удалось сохранить состояние вкладок: {0}</value></data>
   <data name="Error_InvalidFolderPath" xml:space="preserve"><value>Недопустимый путь папки.</value></data>
   <data name="Error_WatchFolder" xml:space="preserve"><value>Не удалось включить наблюдение за папкой: {0}</value></data>
+  <data name="Error_RefreshWorkspace" xml:space="preserve"><value>Не удалось обновить корзины: {0}</value></data>
+  <data name="Error_WorkspaceNotReady" xml:space="preserve"><value>Рабочая область не загружена. Восстановите доступ к её данным и обновите список перед созданием корзины.</value></data>
+  <data name="Error_RenameRecoveryPending" xml:space="preserve"><value>Исход предыдущего переименования корзины не определён. Сведения для восстановления сохранены. Проверьте исходную и целевую папки, а также доступ к файлу состояния. Затем обновите список перед переименованием или удалением корзины.</value></data>
+  <data name="Error_RenameAppliedStatePending" xml:space="preserve"><value>Папка корзины переименована, но не удалось сохранить её новую связь. Сведения для восстановления сохранены: {0}</value></data>
 
   <!-- Core: file transfer -->
   <data name="Error_FileNotFoundPath" xml:space="preserve"><value>Файл не найден: {0}</value></data>
@@ -234,4 +238,8 @@
   <data name="Settings_ConfirmBasketDeletion" xml:space="preserve"><value>Подтверждать удаление корзин</value></data>
   <data name="Settings_ConfirmBasketDeletionDesc" xml:space="preserve"><value>Спрашивать перед перемещением корзины и её содержимого в корзину Windows.</value></data>
   <data name="Tray_RecentCopiedPaths" xml:space="preserve"><value>Недавно скопированные пути</value></data>
+  <data name="Status_CutAlreadyPasted" xml:space="preserve"><value>Этот вырезанный объект уже вставлен. Для нового перемещения вырежьте объект ещё раз.</value></data>
+  <data name="Error_CutOutcomeUnknown" xml:space="preserve"><value>Исход предыдущего перемещения не подтверждён. Проверьте источник и назначение, затем при необходимости вырежьте объект ещё раз.</value></data>
+  <data name="Error_TransferPartial" xml:space="preserve"><value>Копирование не завершено. Часть файлов могла остаться в {0}. {1}</value></data>
+  <data name="Error_TransferUnknown" xml:space="preserve"><value>Результат операции неизвестен. Перед повторной попыткой проверьте источник {0} и назначение {1}. {2}</value></data>
 </root>
